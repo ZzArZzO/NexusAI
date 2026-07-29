@@ -4,6 +4,8 @@ import { prismaAdapter } from 'better-auth/adapters/prisma'
 import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { nextCookies } from 'better-auth/next-js'
 
+import { COOKIE_PREFIX } from './auth-shared'
+
 /**
  * Authentication.
  *
@@ -55,7 +57,7 @@ export const auth = betterAuth({
   },
 
   advanced: {
-    cookiePrefix: 'nexus',
+    cookiePrefix: COOKIE_PREFIX,
     // Next augments ProcessEnv with a typed NODE_ENV, so this is a known
     // property rather than an index signature access.
     useSecureCookies: process.env.NODE_ENV === 'production',

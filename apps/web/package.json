@@ -22,6 +22,8 @@
     "@nexusai/db": "workspace:*",
     "@nexusai/ui": "workspace:*",
     "better-auth": "catalog:",
+    "cmdk": "catalog:",
+    "date-fns": "catalog:",
     "dotenv": "catalog:",
     "lucide-react": "catalog:",
     "motion": "catalog:",
@@ -29,6 +31,8 @@
     "next-themes": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "server-only": "0.0.1",
+    "sonner": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

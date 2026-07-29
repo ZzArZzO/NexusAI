@@ -48,3 +48,6 @@ infra/.data/
 # contents are not — your own writing should not land in git by accident.
 packages/db/prisma/seed/memory/*
 !packages/db/prisma/seed/memory/.gitkeep
+
+# Playwright storage state (contains a live session cookie)
+apps/web/e2e/.auth/

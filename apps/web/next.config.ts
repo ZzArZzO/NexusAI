@@ -31,14 +31,23 @@ const config: NextConfig = {
     : {}),
 
   /**
-   * Cache Components: routes render a prerendered static shell and stream the
-   * dynamic parts into it, with `use cache` / `cacheLife` / `cacheTag` as the
-   * caching primitives. In Next 16 this single flag subsumes what used to be
-   * `experimental.ppr`, `experimental.dynamicIO` and `experimental.cachedNavigations`.
+   * Cache Components is deliberately OFF.
    *
-   * This is why the dashboard can paint instantly while live panels fill in.
+   * It requires every uncached read to sit inside a `<Suspense>` boundary so a
+   * static shell can be prerendered around it. That is a real win for pages with
+   * mixed cacheability — a marketing page with a live price, say.
+   *
+   * This application is not that. Every route is behind authentication, every
+   * panel is per-operator data, and the database is on the same machine. There is
+   * no meaningful static shell to prerender: the layout itself reads the session
+   * and the departments' live status. Enabling it would buy a skeleton of chrome
+   * in exchange for restructuring every layout and page around boundaries that
+   * exist for no other reason.
+   *
+   * Worth revisiting if this is ever hosted away from its database, where the
+   * latency that shells hide actually appears.
    */
-  cacheComponents: true,
+  cacheComponents: false,
 
   /** Workspace packages ship TypeScript source, so Next compiles them itself. */
   transpilePackages: ['@nexusai/ui', '@nexusai/core', '@nexusai/db'],
