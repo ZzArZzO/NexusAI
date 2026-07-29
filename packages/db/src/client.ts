@@ -18,6 +18,18 @@ import { PrismaClient } from '../generated/client'
  * 2. The instance is cached on `globalThis` outside production, so Next.js hot
  *    reload reuses one connection pool instead of opening a new one per edit.
  */
+/**
+ * A client pointed at an explicit database.
+ *
+ * Exported because tests, the seed and any maintenance script need to connect
+ * somewhere that is *not* `DATABASE_URL` — and reaching into `generated/` from
+ * outside this package to construct one would make the generated path part of
+ * everyone's API surface.
+ */
+export function createClient(connectionString: string): PrismaClient {
+  return new PrismaClient({ adapter: new PrismaPg({ connectionString }) })
+}
+
 function createPrismaClient(): PrismaClient {
   const connectionString = process.env['DATABASE_URL']
   if (!connectionString) {

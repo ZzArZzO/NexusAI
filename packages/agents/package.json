@@ -1,0 +1,40 @@
+{
+  "name": "@nexusai/agents",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The agent kernel: DepartmentAgent, the risk-tiered tool registry, the model router, and memory retrieval.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./models": "./src/models/router.ts",
+    "./tools": "./src/tools/registry.ts",
+    "./memory": "./src/memory/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "clean": "rimraf dist .turbo coverage *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "catalog:",
+    "@ai-sdk/openai": "catalog:",
+    "@nexusai/core": "workspace:*",
+    "@nexusai/db": "workspace:*",
+    "ai": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@nexusai/config": "workspace:*",
+    "@types/node": "catalog:",
+    "@prisma/adapter-pg": "catalog:",
+    "dotenv": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "eslint": "catalog:",
+    "rimraf": "6.1.2",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

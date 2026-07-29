@@ -80,3 +80,6 @@ minimumReleaseAgeExclude:
   - framer-motion@12.43.0
   - motion-dom@12.43.0
   - motion@12.43.0
+  - '@ai-sdk/gateway@4.0.31'
+  - '@ai-sdk/openai@4.0.23'
+  - ai@7.0.41

@@ -1,0 +1,24 @@
+{
+  "extends": "@nexusai/config/tsconfig/node.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": ".",
+
+    /*
+     * Relaxed for this package only.
+     *
+     * `exactOptionalPropertyTypes` earns its keep on domain types and Prisma
+     * inputs, where "absent" and "explicitly undefined" genuinely differ — it
+     * stays on everywhere else. The AI SDK's types are not authored for it, so
+     * inside this package it rejects correct usage at every SDK boundary:
+     * tool sets, model call options, stream results.
+     *
+     * The alternative was a cast at each of those boundaries, which multiplies
+     * as more SDK surface is used and hides real mismatches among the noise.
+     * One scoped, explained exception is the smaller cost.
+     */
+    "exactOptionalPropertyTypes": false
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts", "*.config.ts"],
+  "exclude": ["node_modules", "dist", "coverage"]
+}

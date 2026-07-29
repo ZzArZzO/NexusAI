@@ -1,4 +1,4 @@
-export { getPrisma, prisma, type PrismaClient } from './client'
+export { createClient, getPrisma, prisma, type PrismaClient } from './client'
 export { Prisma } from '../generated/client'
 
 export type {
