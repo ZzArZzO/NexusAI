@@ -1,4 +1,4 @@
-import { getPrisma } from '@nexusai/db'
+import { getPrisma, prisma } from '@nexusai/db'
 import { betterAuth } from 'better-auth'
 import { prismaAdapter } from 'better-auth/adapters/prisma'
 import { APIError, createAuthMiddleware } from 'better-auth/api'
@@ -19,21 +19,45 @@ import { COOKIE_PREFIX } from './auth-shared'
 
 const SESSION_DAYS = 30
 
+/**
+ * A build compiles the app; it does not sign cookies.
+ *
+ * `next build` imports every route module to collect page data, and this module
+ * is reached from all of them — so demanding a real secret at module scope makes
+ * a valid secret a *build* dependency, not a runtime one. CI has no secrets and
+ * should not need any to typecheck and bundle.
+ *
+ * The placeholder is gated on SKIP_ENV_VALIDATION, which is set only by builds
+ * and never by a running server, and is deliberately unusable-looking. Without
+ * that flag a missing secret still fails loudly, which is the case that matters:
+ * a server that starts with a fake signing key is a security hole.
+ */
 function requiredSecret(): string {
   const secret = process.env['AUTH_SECRET']
 
-  if (!secret || secret.length < 32) {
-    throw new Error(
-      'AUTH_SECRET must be set to at least 32 characters. Generate one with:\n' +
-        '  openssl rand -base64 32',
-    )
+  if (secret && secret.length >= 32) return secret
+
+  if (process.env['SKIP_ENV_VALIDATION'] === '1' || process.env['SKIP_ENV_VALIDATION'] === 'true') {
+    return 'build-time-placeholder-never-used-to-sign-anything'
   }
 
-  return secret
+  throw new Error(
+    'AUTH_SECRET must be set to at least 32 characters. Generate one with:\n' +
+      '  openssl rand -base64 32',
+  )
 }
 
 export const auth = betterAuth({
-  database: prismaAdapter(getPrisma(), { provider: 'postgresql' }),
+  /**
+   * The lazy `prisma` proxy, not `getPrisma()`.
+   *
+   * Calling `getPrisma()` here connects at module-evaluation time, and this
+   * module is imported by every authenticated route — so `next build`, which
+   * imports each route to collect page data, would demand a live DATABASE_URL
+   * just to compile. That is exactly what happened in CI while passing locally,
+   * because next.config.ts loads a .env that CI does not have.
+   */
+  database: prismaAdapter(prisma, { provider: 'postgresql' }),
   secret: requiredSecret(),
   baseURL: process.env['APP_URL'] ?? 'http://localhost:3200',
 

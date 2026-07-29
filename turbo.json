@@ -2,8 +2,40 @@
   "$schema": "https://turborepo.com/schema.json",
   "ui": "tui",
   "globalDependencies": ["**/.env.*local", "tsconfig.json"],
+
   "globalEnv": ["NODE_ENV", "CI", "VERCEL", "VERCEL_ENV"],
-  "globalPassThroughEnv": ["DATABASE_URL", "DIRECT_DATABASE_URL"],
+
+  /*
+   * Turbo strips the environment by default so builds are hermetic and the cache
+   * key is honest. Anything a task genuinely needs has to be declared here or it
+   * silently arrives undefined.
+   *
+   * That is not theoretical: SKIP_ENV_VALIDATION was set in the CI workflow and
+   * never reached `next build`, so the build demanded a real AUTH_SECRET and
+   * DATABASE_URL and failed — while passing locally, where next.config.ts loads
+   * a .env that CI does not have. Two different reasons it worked on one machine
+   * and not the other, hiding each other.
+   */
+  "globalPassThroughEnv": [
+    "SKIP_ENV_VALIDATION",
+    "BUILD_STANDALONE",
+    "DATABASE_URL",
+    "DIRECT_DATABASE_URL",
+    "SHADOW_DATABASE_URL",
+    "TEST_DATABASE_URL",
+    "TEST_DATABASE_URL_AGENTS",
+    "AUTH_SECRET",
+    "APP_URL",
+    "NEXT_PUBLIC_APP_URL",
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "MODEL_PROFILE",
+    "CREDENTIAL_ENCRYPTION_KEY",
+    "LOG_LEVEL",
+    "E2E_BASE_URL",
+    "E2E_EMAIL",
+    "E2E_PASSWORD"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build", "generate"],
