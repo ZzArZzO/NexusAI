@@ -26,6 +26,7 @@
     "db:migrate:deploy": "pnpm --filter @nexusai/db migrate:deploy",
     "db:migrate:check": "pnpm --filter @nexusai/db migrate:check",
     "db:seed": "pnpm --filter @nexusai/db seed",
+    "db:embed": "pnpm --filter @nexusai/agents embed",
     "db:studio": "pnpm --filter @nexusai/db studio",
     "infra:up": "docker compose -f infra/compose.yml up -d",
     "infra:down": "docker compose -f infra/compose.yml down",

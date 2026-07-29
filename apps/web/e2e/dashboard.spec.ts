@@ -56,14 +56,27 @@ test.describe('dashboard', () => {
     await expect(page.getByText('Nothing to approve')).toBeVisible()
   })
 
-  test('the command palette opens with the keyboard and navigates', async ({ page }) => {
-    await page.keyboard.press('ControlOrMeta+k')
-
+  test('the command palette opens and navigates', async ({ page }) => {
     const palette = page.getByPlaceholder('Go to a department, or type a command')
+
+    // Open via the button first. Beyond testing the button, this proves the page
+    // has hydrated — the keyboard shortcut is registered in an effect, so
+    // pressing it before hydration genuinely does nothing, and a test that races
+    // that boundary fails intermittently for a reason that is not a bug.
+    await page.getByRole('button', { name: /Search or jump to/ }).click()
+    await expect(palette).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(palette).toHaveCount(0)
+
+    // Now the shortcut, which is the primary way in.
+    await page.keyboard.press('ControlOrMeta+k')
     await expect(palette).toBeVisible()
 
     await palette.fill('finance')
-    await page.keyboard.press('Enter')
+
+    // Clicking rather than pressing Enter: which row cmdk highlights after a
+    // filter is its behaviour to define, not ours to assert.
+    await page.getByRole('option', { name: /Finance/ }).click()
 
     await expect(page).toHaveURL(/\/departments\/finance/)
   })
@@ -91,9 +104,8 @@ test.describe('dashboard', () => {
     await expect(badge).toHaveCount(0)
   })
 
-  test('signing out returns to the sign-in page', async ({ page }) => {
-    await page.getByRole('button', { name: /Sign out/ }).click()
-
-    await expect(page).toHaveURL(/\/sign-in/)
-  })
+  // Signing out lives in auth.spec.ts, not here. It revokes the session
+  // server-side, and every test in this project shares one storage state — so
+  // running it here logged the others out mid-suite, producing failures that had
+  // nothing to do with the code under test.
 })

@@ -15,7 +15,6 @@ import 'server-only'
  * applies.
  */
 export function serverNow(): number {
-  // eslint-disable-next-line react-hooks/purity -- see the note above
   return Date.now()
 }
 

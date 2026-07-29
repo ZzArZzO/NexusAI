@@ -324,12 +324,12 @@ model DepartmentConfig {
   /// Tool names this department may call. Empty array means the code default.
   tools        Json   @default("[]")
   /// Memory namespaces it may read and write.
-  memoryScopes Json   @default("[]")
+  memoryScopes Json   @default("[]") @map("memory_scopes")
   /// Hard ceiling on tool-loop iterations, so a confused agent cannot spin.
-  maxSteps     Int    @default(12)
+  maxSteps     Int    @default(12) @map("max_steps")
   /// Risk tiers this department may execute without an approval gate.
   /// Never includes 'financial'.
-  autoApprove  Json   @default("[\"read\",\"internal\"]")
+  autoApprove  Json   @default("[\"read\",\"internal\"]") @map("auto_approve")
 
   department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
 

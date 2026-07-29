@@ -44,6 +44,9 @@ catalog:
 
   # --- agents / orchestration ---
   ai: 7.0.41
+  '@ai-sdk/react': 4.0.44
+  react-markdown: 10.1.0
+  remark-gfm: 4.0.1
   '@ai-sdk/anthropic': 4.0.23
   '@ai-sdk/openai': 4.0.23
   inngest: 4.13.0
@@ -83,3 +86,4 @@ minimumReleaseAgeExclude:
   - '@ai-sdk/gateway@4.0.31'
   - '@ai-sdk/openai@4.0.23'
   - ai@7.0.41
+  - '@ai-sdk/react@4.0.44'

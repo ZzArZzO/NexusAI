@@ -18,6 +18,8 @@
     "clean": "rimraf .next .turbo coverage test-results playwright-report *.tsbuildinfo"
   },
   "dependencies": {
+    "@ai-sdk/react": "catalog:",
+    "@nexusai/agents": "workspace:*",
     "@nexusai/core": "workspace:*",
     "@nexusai/db": "workspace:*",
     "@nexusai/ui": "workspace:*",
@@ -29,8 +31,11 @@
     "motion": "catalog:",
     "next": "catalog:",
     "next-themes": "catalog:",
+    "ai": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "react-markdown": "catalog:",
+    "remark-gfm": "catalog:",
     "server-only": "0.0.1",
     "sonner": "catalog:",
     "zod": "catalog:"

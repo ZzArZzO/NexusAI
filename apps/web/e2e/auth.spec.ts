@@ -60,4 +60,27 @@ test.describe('authentication', () => {
     expect(response.status()).toBe(200)
     expect(await response.json()).toMatchObject({ status: 'ok' })
   })
+
+  /**
+   * Signing in and out lives here rather than with the dashboard tests, because
+   * signing out revokes the session server-side — and the authenticated project
+   * shares one storage state, so running it there logged every other test out
+   * mid-suite.
+   */
+  test('a full sign-in and sign-out round trip', async ({ page }) => {
+    await page.goto('/sign-in')
+
+    await page.getByLabel('Email').fill(process.env['E2E_EMAIL'] ?? 'operator@nexus.local')
+    await page.getByLabel('Password').fill(process.env['E2E_PASSWORD'] ?? 'a-long-enough-password')
+    await page.getByRole('button', { name: 'Sign in' }).click()
+
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Good to see you')
+
+    await page.getByRole('button', { name: /Sign out/ }).click()
+    await expect(page).toHaveURL(/\/sign-in/)
+
+    // And the session is genuinely gone, not merely navigated away from.
+    await page.goto('/')
+    await expect(page).toHaveURL(/\/sign-in/)
+  })
 })

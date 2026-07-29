@@ -3,7 +3,7 @@
 import { Badge, Button } from '@nexusai/ui'
 import { LogOutIcon, PauseIcon, PlayIcon, SearchIcon } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { toast } from 'sonner'
 
 import { toggleAutomationPause } from '@/app/actions/automation'
@@ -21,7 +21,24 @@ interface TopbarProps {
 export function Topbar({ userName, automationPaused, canPause, usingMockModels }: TopbarProps) {
   const router = useRouter()
   const [paused, setPaused] = useState(automationPaused)
+  const [paletteOpen, setPaletteOpen] = useState(false)
   const [pending, startTransition] = useTransition()
+
+  // The shortcut lives here, next to the state it toggles, so the button and the
+  // keystroke are one code path rather than the button faking a keystroke.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key.toLowerCase() === 'k' && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault()
+        setPaletteOpen((open) => !open)
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [])
 
   function togglePause() {
     if (!canPause) {
@@ -53,10 +70,7 @@ export function Topbar({ userName, automationPaused, canPause, usingMockModels }
         <button
           type="button"
           onClick={() => {
-            // cmdk owns the dialog; dispatching the shortcut keeps one code path.
-            document.dispatchEvent(
-              new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }),
-            )
+            setPaletteOpen(true)
           }}
           className="flex h-8 items-center gap-2 rounded-md border border-input px-2.5 text-sm text-muted-foreground transition-colors hover:border-ring hover:text-foreground"
         >
@@ -109,7 +123,12 @@ export function Topbar({ userName, automationPaused, canPause, usingMockModels }
         </div>
       </header>
 
-      <CommandPalette automationPaused={paused} onTogglePause={togglePause} />
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        automationPaused={paused}
+        onTogglePause={togglePause}
+      />
     </>
   )
 }

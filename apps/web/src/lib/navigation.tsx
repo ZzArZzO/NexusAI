@@ -62,8 +62,23 @@ export const DEPARTMENT_NAV: (NavItem & { key: DepartmentId })[] = DEPARTMENT_ID
   hint: DEPARTMENTS[key].remit,
 }))
 
-export function departmentIcon(key: DepartmentId): LucideIcon {
-  return DEPARTMENT_ICONS[key]
+/**
+ * The icon as a *component*, not a component-valued variable.
+ *
+ * Assigning `const Icon = departmentIcon(key)` inside a render trips the React
+ * Compiler's "cannot create components during render" rule — and it is right to:
+ * a component identity that changes between renders remounts its subtree. Doing
+ * the lookup inside a stable component avoids that entirely.
+ */
+export function DepartmentIcon({
+  department,
+  className,
+}: {
+  department: DepartmentId
+  className?: string
+}) {
+  const Icon = DEPARTMENT_ICONS[department]
+  return <Icon className={className} aria-hidden />
 }
 
 /** True when `href` is the active route, treating '/' as exact. */

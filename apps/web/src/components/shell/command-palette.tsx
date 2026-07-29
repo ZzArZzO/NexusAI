@@ -3,11 +3,12 @@
 import { Command } from 'cmdk'
 import { PauseIcon, PlayIcon, SearchIcon } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
 
 import { DEPARTMENT_NAV, PRIMARY_NAV } from '@/lib/navigation'
 
 interface CommandPaletteProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
   automationPaused: boolean
   onTogglePause: () => void
 }
@@ -18,24 +19,23 @@ interface CommandPaletteProps {
  * The primary way to move around, which is why every department is reachable in
  * two keystrokes and the pause switch lives here too — the one control you want
  * without hunting for it is the one that stops everything.
+ *
+ * Open state is owned by the topbar rather than here, so the button and the
+ * shortcut are the same code path. It used to be local, and the button opened it
+ * by dispatching a synthetic keydown — which worked, and was a lie: it meant the
+ * button could pass while the actual shortcut was broken.
  */
-export function CommandPalette({ automationPaused, onTogglePause }: CommandPaletteProps) {
+export function CommandPalette({
+  open,
+  onOpenChange,
+  automationPaused,
+  onTogglePause,
+}: CommandPaletteProps) {
   const router = useRouter()
-  const [open, setOpen] = useState(false)
 
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'k' && (event.metaKey || event.ctrlKey)) {
-        event.preventDefault()
-        setOpen((value) => !value)
-      }
-    }
-
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('keydown', onKeyDown)
-    }
-  }, [])
+  function setOpen(next: boolean) {
+    onOpenChange(next)
+  }
 
   function go(href: string) {
     setOpen(false)
@@ -45,7 +45,7 @@ export function CommandPalette({ automationPaused, onTogglePause }: CommandPalet
   return (
     <Command.Dialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={onOpenChange}
       label="Command palette"
       className="fixed inset-0 z-50 bg-background/70 backdrop-blur-sm"
       overlayClassName="fixed inset-0"
@@ -69,6 +69,7 @@ export function CommandPalette({ automationPaused, onTogglePause }: CommandPalet
             {PRIMARY_NAV.map((item) => (
               <Item
                 key={item.href}
+                value={item.label}
                 onSelect={() => {
                   go(item.href)
                 }}
@@ -84,6 +85,7 @@ export function CommandPalette({ automationPaused, onTogglePause }: CommandPalet
             {DEPARTMENT_NAV.map((item) => (
               <Item
                 key={item.href}
+                value={item.label}
                 onSelect={() => {
                   go(item.href)
                 }}
@@ -97,6 +99,7 @@ export function CommandPalette({ automationPaused, onTogglePause }: CommandPalet
 
           <Group heading="Company">
             <Item
+              value={automationPaused ? 'Resume automation' : 'Pause all automation'}
               onSelect={() => {
                 setOpen(false)
                 onTogglePause()
@@ -136,13 +139,21 @@ function Item({
   children,
   onSelect,
   hint,
+  value,
 }: {
   children: React.ReactNode
   onSelect: () => void
   hint?: string | undefined
+  /**
+   * Explicit, rather than letting cmdk derive it from the rendered text.
+   * Derived values include the hint, so typing a word that appears in one
+   * department's description would match a different department's row.
+   */
+  value: string
 }) {
   return (
     <Command.Item
+      value={value}
       onSelect={onSelect}
       className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-2 text-sm data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground"
     >

@@ -247,12 +247,38 @@ export interface DepartmentSeed {
   key: DepartmentId
   displayName: string
   charter: string
+  /**
+   * Tools this department may call.
+   *
+   * Written explicitly rather than left empty to inherit a code default. The
+   * kernel does fall back, so an empty list still works — but then the database
+   * says a department has no tools while it demonstrably uses several, and the
+   * UI has nothing true to show.
+   */
+  tools: string[]
   /** Memory namespaces this department may read and write. */
   memoryScopes: string[]
   /** Risk tiers it may execute without an approval gate. Never includes 'financial'. */
   autoApprove: string[]
   maxSteps: number
 }
+
+/**
+ * What every department gets in Phase 1.
+ *
+ * All read or internal — nothing here leaves the system. Later phases add
+ * connector tools per department, and those inherit the gate rather than
+ * inventing their own path through it.
+ */
+const PHASE_1_TOOLS = [
+  'memory.recall',
+  'memory.write',
+  'task.create',
+  'task.update',
+  'task.list',
+  'goal.list',
+  'report.generate',
+]
 
 /**
  * Every department reads the shared `company` scope, plus its own. That is what
@@ -264,6 +290,7 @@ export const DEPARTMENT_SEEDS: DepartmentSeed[] = (Object.keys(CHARTERS) as Depa
     key,
     displayName: DEPARTMENTS[key].displayName,
     charter: CHARTERS[key],
+    tools: [...PHASE_1_TOOLS],
     memoryScopes: key === 'ceo' ? ['company', 'ceo', 'personal'] : ['company', key],
     autoApprove: ['read', 'internal'],
     maxSteps: key === 'ceo' || key === 'operations' ? 16 : 12,

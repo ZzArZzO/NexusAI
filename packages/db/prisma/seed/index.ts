@@ -154,12 +154,14 @@ async function main(): Promise<void> {
       await prisma.departmentConfig.upsert({
         where: { departmentId: department.id },
         update: {
+          tools: seed.tools,
           memoryScopes: seed.memoryScopes,
           autoApprove: seed.autoApprove,
           maxSteps: seed.maxSteps,
         },
         create: {
           departmentId: department.id,
+          tools: seed.tools,
           memoryScopes: seed.memoryScopes,
           autoApprove: seed.autoApprove,
           maxSteps: seed.maxSteps,
