@@ -1,0 +1,9 @@
+# Drop markdown files here.
+#
+# Every .md file in this directory is ingested into long-term memory on the next
+# `pnpm db:seed`, keyed by content hash — editing a file re-ingests it, leaving
+# it alone does nothing.
+#
+# This directory is committed but its contents are gitignored, so your real
+# notes stay out of version control. Remove that rule in .gitignore if you would
+# rather they were tracked.

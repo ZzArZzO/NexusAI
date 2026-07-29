@@ -11,8 +11,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # The pipeline compiles and lints but never connects to a real service.
-  SKIP_ENV_VALIDATION: '1'
   NEXT_TELEMETRY_DISABLED: '1'
   TURBO_TELEMETRY_DISABLED: '1'
 
@@ -20,13 +18,31 @@ jobs:
   verify:
     name: Lint · Typecheck · Test · Build
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+
+    # Integration tests need a real Postgres: the behaviour under test — pgvector
+    # ranking, a generated tsvector column, a trigger spanning two tables — only
+    # exists in the database. Mocking Prisma would test the mock.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: nexus
+          POSTGRES_PASSWORD: nexus
+          POSTGRES_DB: nexusai_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U nexus -d nexusai_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+
+    env:
+      # The build compiles but never connects; the tests connect but never build.
+      SKIP_ENV_VALIDATION: '1'
+      TEST_DATABASE_URL: postgresql://nexus:nexus@localhost:5432/nexusai_test?schema=public
 
     steps:
       - uses: actions/checkout@v5
-
       - uses: pnpm/action-setup@v4
-
       - uses: actions/setup-node@v6
         with:
           node-version: 24
@@ -77,9 +93,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
-
       - uses: pnpm/action-setup@v4
-
       - uses: actions/setup-node@v6
         with:
           node-version: 24
@@ -92,20 +106,23 @@ jobs:
       - name: Generate Prisma client
         run: pnpm db:generate
 
-      - name: Bootstrap extensions and shadow database
+      # Only the shadow database is created here. Extensions are installed by the
+      # migration itself, which is what makes applying migrations to an empty
+      # database sufficient — and what lets the drift check replay history into a
+      # freshly reset shadow database.
+      - name: Create shadow database
         env:
           PGPASSWORD: nexus
-        run: |
-          psql -h localhost -U nexus -d nexusai_ci -f infra/sql/bootstrap/001_extensions.sql
-          psql -h localhost -U nexus -d nexusai_ci -v ON_ERROR_STOP=1 \
-            -c "CREATE DATABASE nexusai_ci_shadow"
-          psql -h localhost -U nexus -d nexusai_ci_shadow -f infra/sql/bootstrap/001_extensions.sql
+        run: psql -h localhost -U nexus -d nexusai_ci -c "CREATE DATABASE nexusai_ci_shadow"
 
-      - name: Apply migrations
+      - name: Apply migrations to an empty database
         run: pnpm db:migrate:deploy
 
       - name: Fail if the schema has drifted from its migrations
         run: pnpm db:migrate:check
 
       - name: Seed
+        run: pnpm db:seed
+
+      - name: Seed again — it must be idempotent
         run: pnpm db:seed

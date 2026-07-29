@@ -8,6 +8,7 @@
     "src/**/*.ts",
     "prisma/**/*.ts",
     "scripts/**/*.ts",
+    "tests/**/*.ts",
     "generated/**/*.ts",
     "*.config.ts"
   ],

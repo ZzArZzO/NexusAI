@@ -43,3 +43,8 @@ pnpm-debug.log*
 
 # local infra volumes
 infra/.data/
+
+# Personal notes fed into long-term memory. The directory is tracked, its
+# contents are not — your own writing should not land in git by accident.
+packages/db/prisma/seed/memory/*
+!packages/db/prisma/seed/memory/.gitkeep

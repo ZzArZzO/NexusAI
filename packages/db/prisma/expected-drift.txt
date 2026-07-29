@@ -1,0 +1,29 @@
+# Reviewed divergence between schema.prisma and the migration history.
+#
+# `pnpm db:migrate:check` compares `prisma migrate diff` against this file
+# exactly. Lines starting with # are ignored, as are blank lines.
+#
+# Everything below is created by raw SQL in the init migration because Prisma's
+# datamodel cannot express it:
+#
+#   HNSW index on `embedding`
+#     Prisma supports Gin/Gist/Brin/Hash/SpGist index types but not hnsw, and
+#     has no syntax for operator-class parameters (m, ef_construction).
+#
+#   GIN index on `fts`
+#     The column is Unsupported("tsvector"), and Prisma will not index a column
+#     it cannot type.
+#
+#   `fts` generated default
+#     A stored generated column computed as
+#     to_tsvector('english', coalesce(content, '')). Prisma has no
+#     representation for generated-column expressions.
+#
+# If this file needs to change, that is a real decision worth seeing in a diff —
+# which is the whole reason the check compares against a snapshot rather than
+# simply tolerating a non-empty result.
+
+[*] Changed the `memory_chunk` table
+  [-] Removed index on columns (embedding)
+  [-] Removed index on columns (fts)
+  [*] Altered column `fts` (default changed from `Some(DbGenerated(Some("to_tsvector('english'::regconfig, COALESCE(content, ''::text))")))` to `None`)

@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "@nexusai/db",
   "version": "0.1.0",
   "private": true,
@@ -13,7 +13,7 @@
     "migrate": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
     "migrate:check": "tsx scripts/check-drift.ts",
-    "seed": "tsx prisma/seed.ts",
+    "seed": "tsx prisma/seed/index.ts",
     "studio": "prisma studio",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

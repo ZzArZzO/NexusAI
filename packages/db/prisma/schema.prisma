@@ -1,12 +1,13 @@
-// NexusAI — baseline schema (Phase 0).
+// NexusAI — schema
 //
-// Phase 1 expands this with the full platform, agent-runtime, work and memory
-// models. What is here now exists to prove the migrate/generate/seed pipeline
-// end to end, and to hold the settings the kill switch reads.
+// Prisma owns the relational shape. Vector columns, generated tsvector columns,
+// HNSW indexes and the hybrid-search function live in raw SQL migrations under
+// packages/db/prisma/migrations, because Prisma cannot express them.
 //
-// Vector columns, HNSW indexes, RLS policies and RPC functions are NOT declared
-// here — they live in `infra/sql/` and are applied as raw SQL migrations, because
-// Prisma cannot express them. Prisma owns the relational shape; SQL owns the rest.
+// Conventions:
+//   - snake_case in the database, camelCase in TypeScript (@map / @@map everywhere)
+//   - every tenant-scoped row carries workspaceId, so multi-user later is data, not migration
+//   - deletes cascade from the workspace down; audit_log is the deliberate exception
 
 generator client {
   provider            = "prisma-client"
@@ -18,16 +19,40 @@ datasource db {
   provider = "postgresql"
 }
 
-/// A tenant boundary. Single-user today, but every row in the system hangs off
-/// a workspace so multi-user is a data question rather than a migration.
+// ═══════════════════════════════════════════════════════════════════
+// Platform
+// ═══════════════════════════════════════════════════════════════════
+
+/// A tenant boundary. Single-user today, but every row hangs off a workspace
+/// so adding people later is a data question rather than a migration.
 model Workspace {
   id        String   @id @default(uuid()) @db.Uuid
   slug      String   @unique
   name      String
+  /// IANA zone. Drives scheduled work and every date rendered in the UI.
+  timezone  String   @default("UTC")
+  /// ISO 4217. Finance formats against this.
+  currency  String   @default("EUR")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  settings SystemSetting[]
+  settings       SystemSetting[]
+  memberships    Membership[]
+  roles          Role[]
+  departments    Department[]
+  goals          Goal[]
+  kpis           Kpi[]
+  tasks          Task[]
+  reports        Report[]
+  runs           Run[]
+  conversations  Conversation[]
+  approvals      ApprovalRequest[]
+  notifications  Notification[]
+  auditLogs      AuditLog[]
+  memoryDocs     MemoryDocument[]
+  memoryChunks   MemoryChunk[]
+  memoryFacts    MemoryFact[]
+  integrations   IntegrationConnection[]
 
   @@map("workspace")
 }
@@ -47,4 +72,935 @@ model SystemSetting {
   @@unique([workspaceId, key])
   @@index([workspaceId])
   @@map("system_setting")
+}
+
+// ─── Better Auth ───────────────────────────────────────────────────
+// Shape dictated by Better Auth's Prisma adapter. Field names are not ours to
+// choose; `pnpm auth:generate` regenerates them if the library changes.
+
+model User {
+  id            String   @id
+  name          String
+  email         String   @unique
+  emailVerified Boolean  @default(false) @map("email_verified")
+  image         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  sessions      Session[]
+  accounts      Account[]
+  memberships   Membership[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
+  conversations Conversation[]
+  approvals     ApprovalRequest[] @relation("ApprovalDecidedBy")
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime @map("expires_at")
+  token     String   @unique
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  userId                String    @map("user_id")
+  accessToken           String?   @map("access_token")
+  refreshToken          String?   @map("refresh_token")
+  idToken               String?   @map("id_token")
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at")
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at")
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+// ─── Authorization ─────────────────────────────────────────────────
+
+/// Joins a person to a workspace with a role. The unit of "who can do what".
+model Membership {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  userId      String   @map("user_id")
+  roleId      String   @map("role_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role      @relation(fields: [roleId], references: [id])
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@map("membership")
+}
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  /// Stable identifier used in code: 'owner' | 'admin' | 'operator' | 'viewer'
+  key         String
+  name        String
+  description String?
+  /// Built-in roles cannot be deleted or have their key changed.
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  memberships Membership[]
+  permissions RolePermission[]
+
+  @@unique([workspaceId, key])
+  @@map("role")
+}
+
+/// Permissions are global vocabulary, not per-workspace rows: `resource:action`.
+model Permission {
+  id          String   @id @default(uuid()) @db.Uuid
+  /// e.g. 'marketing.content', 'finance.transaction', 'agent.run'
+  resource    String
+  /// e.g. 'read', 'create', 'update', 'delete', 'publish', 'approve'
+  action      String
+  description String?
+
+  roles RolePermission[]
+
+  @@unique([resource, action])
+  @@map("permission")
+}
+
+model RolePermission {
+  roleId       String @map("role_id") @db.Uuid
+  permissionId String @map("permission_id") @db.Uuid
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permission")
+}
+
+/// Append-only. Nothing in the application updates or deletes these rows —
+/// "why did this happen" must survive whatever else changes.
+model AuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  /// Exactly one of userId / departmentId is set: a person or an agent acted.
+  userId       String?  @map("user_id")
+  departmentId String?  @map("department_id") @db.Uuid
+  action       String
+  resource     String
+  resourceId   String?  @map("resource_id")
+  /// State before and after, for anything that mutated a row.
+  before       Json?
+  after        Json?
+  metadata     Json?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  workspace  Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([resource, resourceId])
+  @@map("audit_log")
+}
+
+model Notification {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  userId      String?   @map("user_id")
+  level       NotificationLevel @default(info)
+  title       String
+  body        String?
+  /// Where clicking the notification should take you.
+  href        String?
+  readAt      DateTime? @map("read_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, readAt, createdAt])
+  @@map("notification")
+}
+
+enum NotificationLevel {
+  info
+  success
+  warning
+  critical
+
+  @@map("notification_level")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Agent runtime
+// ═══════════════════════════════════════════════════════════════════
+
+enum DepartmentKey {
+  ceo
+  operations
+  research
+  marketing
+  sales
+  support
+  finance
+  engineering
+  assistant
+
+  @@map("department_key")
+}
+
+/// One row per department. The charter is the system prompt; everything else
+/// is the configuration the kernel reads at invocation time.
+model Department {
+  id          String        @id @default(uuid()) @db.Uuid
+  workspaceId String        @map("workspace_id") @db.Uuid
+  key         DepartmentKey
+  displayName String        @map("display_name")
+  /// System prompt: responsibilities, tone, escalation rules.
+  charter     String
+  /// Editable without a deploy; falls back to the code default when null.
+  enabled     Boolean       @default(true)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  config    DepartmentConfig?
+
+  runs          Run[]
+  tasksOwned    Task[]            @relation("TaskDepartment")
+  tasksCreated  Task[]            @relation("TaskCreatedBy")
+  reports       Report[]
+  conversations Conversation[]
+  approvals     ApprovalRequest[]
+  auditLogs     AuditLog[]
+  memoryDocs    MemoryDocument[]
+
+  @@unique([workspaceId, key])
+  @@map("department")
+}
+
+/// Split from Department so tuning model routing and limits never rewrites the
+/// charter row, and so the config can be versioned independently later.
+model DepartmentConfig {
+  departmentId String @id @map("department_id") @db.Uuid
+  /// Role → model id overrides, e.g. { "reasoning": "claude-opus-5" }.
+  /// Empty object means "use the ModelRouter defaults".
+  models       Json   @default("{}")
+  /// Tool names this department may call. Empty array means the code default.
+  tools        Json   @default("[]")
+  /// Memory namespaces it may read and write.
+  memoryScopes Json   @default("[]")
+  /// Hard ceiling on tool-loop iterations, so a confused agent cannot spin.
+  maxSteps     Int    @default(12)
+  /// Risk tiers this department may execute without an approval gate.
+  /// Never includes 'financial'.
+  autoApprove  Json   @default("[\"read\",\"internal\"]")
+
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@map("department_config")
+}
+
+enum RunTrigger {
+  chat
+  schedule
+  event
+  delegation
+  manual
+
+  @@map("run_trigger")
+}
+
+enum RunStatus {
+  running
+  succeeded
+  failed
+  cancelled
+  awaiting_approval
+
+  @@map("run_status")
+}
+
+/// One agent invocation. The root of the explainability chain:
+/// run → run_step → tool_call, and run_step → the memory chunks it cited.
+model Run {
+  id             String     @id @default(uuid()) @db.Uuid
+  workspaceId    String     @map("workspace_id") @db.Uuid
+  departmentId   String     @map("department_id") @db.Uuid
+  conversationId String?    @map("conversation_id") @db.Uuid
+  /// Set when this run was delegated by another run, forming the call tree.
+  parentRunId    String?    @map("parent_run_id") @db.Uuid
+  trigger        RunTrigger
+  status         RunStatus  @default(running)
+  /// Free-text summary of what the run was asked to do.
+  objective      String?
+  /// Populated on completion; the answer or artifact the run produced.
+  outcome        String?
+  error          String?
+  /// Durable-execution correlation, so a run links to its Inngest history.
+  inngestRunId   String?    @map("inngest_run_id")
+
+  inputTokens     Int   @default(0) @map("input_tokens")
+  outputTokens    Int   @default(0) @map("output_tokens")
+  cachedTokens    Int   @default(0) @map("cached_tokens")
+  /// Micro-dollars, so cost arithmetic never touches a float.
+  costMicros      Int   @default(0) @map("cost_micros")
+
+  startedAt   DateTime  @default(now()) @map("started_at")
+  finishedAt  DateTime? @map("finished_at")
+  durationMs  Int?      @map("duration_ms")
+
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  department   Department    @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  parentRun    Run?          @relation("RunTree", fields: [parentRunId], references: [id], onDelete: SetNull)
+  childRuns    Run[]         @relation("RunTree")
+
+  steps     RunStep[]
+  toolCalls ToolCall[]
+  approvals ApprovalRequest[]
+  tasks     Task[]
+  reports   Report[]
+
+  @@index([workspaceId, startedAt])
+  @@index([departmentId, startedAt])
+  @@index([conversationId])
+  @@index([parentRunId])
+  @@map("run")
+}
+
+/// One iteration of the tool loop.
+model RunStep {
+  id        String   @id @default(uuid()) @db.Uuid
+  runId     String   @map("run_id") @db.Uuid
+  /// 0-based position within the run.
+  index     Int
+  /// Short natural-language summary of the model's reasoning for this step.
+  /// Not raw chain of thought — a caption, so the timeline is readable.
+  summary   String?
+  /// Ids of memory chunks retrieved for this step, in rank order.
+  /// Denormalised deliberately: the citation set must survive chunk deletion.
+  citedChunkIds String[] @default([]) @map("cited_chunk_ids")
+  model     String?
+  inputTokens  Int      @default(0) @map("input_tokens")
+  outputTokens Int      @default(0) @map("output_tokens")
+  cachedTokens Int      @default(0) @map("cached_tokens")
+  startedAt DateTime @default(now()) @map("started_at")
+  durationMs Int?    @map("duration_ms")
+
+  run       Run        @relation(fields: [runId], references: [id], onDelete: Cascade)
+  toolCalls ToolCall[]
+
+  @@unique([runId, index])
+  @@index([runId])
+  @@map("run_step")
+}
+
+enum ToolCallStatus {
+  succeeded
+  failed
+  awaiting_approval
+  rejected
+  expired
+
+  @@map("tool_call_status")
+}
+
+enum RiskTier {
+  read
+  internal
+  external
+  financial
+
+  @@map("risk_tier")
+}
+
+/// Every tool invocation, including the ones that never executed because an
+/// approval expired. The rejected rows are the point: they prove what did not happen.
+model ToolCall {
+  id         String         @id @default(uuid()) @db.Uuid
+  runId      String         @map("run_id") @db.Uuid
+  runStepId  String?        @map("run_step_id") @db.Uuid
+  toolName   String         @map("tool_name")
+  risk       RiskTier
+  status     ToolCallStatus
+  input      Json
+  output     Json?
+  error      String?
+  startedAt  DateTime       @default(now()) @map("started_at")
+  durationMs Int?           @map("duration_ms")
+
+  run     Run              @relation(fields: [runId], references: [id], onDelete: Cascade)
+  runStep RunStep?         @relation(fields: [runStepId], references: [id], onDelete: SetNull)
+  approval ApprovalRequest?
+
+  @@index([runId])
+  @@index([toolName, startedAt])
+  @@map("tool_call")
+}
+
+enum ApprovalStatus {
+  pending
+  approved
+  rejected
+  expired
+
+  @@map("approval_status")
+}
+
+/// The gate. A tool whose risk tier demands approval writes one of these and
+/// blocks until it resolves. Expiry resolves to `expired`, never to approved —
+/// the system fails closed.
+model ApprovalRequest {
+  id           String         @id @default(uuid()) @db.Uuid
+  workspaceId  String         @map("workspace_id") @db.Uuid
+  departmentId String         @map("department_id") @db.Uuid
+  runId        String?        @map("run_id") @db.Uuid
+  toolCallId   String?        @unique @map("tool_call_id") @db.Uuid
+
+  status       ApprovalStatus @default(pending)
+  risk         RiskTier
+  /// What the user is being asked to allow, in their words not the tool's.
+  title        String
+  summary      String
+  /// The exact payload that will execute on approval. Rendered for review.
+  payload      Json
+  /// Financial actions need a second, explicit confirmation.
+  requiresSecondConfirmation Boolean @default(false) @map("requires_second_confirmation")
+  secondConfirmedAt DateTime? @map("second_confirmed_at")
+
+  /// Event name the workflow is parked on, so resolving this resumes the run.
+  resumeEvent  String?        @map("resume_event")
+  decidedById  String?        @map("decided_by_id")
+  decisionNote String?        @map("decision_note")
+
+  createdAt  DateTime  @default(now()) @map("created_at")
+  expiresAt  DateTime  @map("expires_at")
+  decidedAt  DateTime? @map("decided_at")
+
+  workspace  Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  run        Run?       @relation(fields: [runId], references: [id], onDelete: SetNull)
+  toolCall   ToolCall?  @relation(fields: [toolCallId], references: [id], onDelete: SetNull)
+  decidedBy  User?      @relation("ApprovalDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status, createdAt])
+  @@index([expiresAt])
+  @@map("approval_request")
+}
+
+model Conversation {
+  id           String   @id @default(uuid()) @db.Uuid
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  departmentId String   @map("department_id") @db.Uuid
+  userId       String?  @map("user_id")
+  title        String?
+  /// Rolling summary written when the transcript outgrows the context budget.
+  summary      String?
+  archivedAt   DateTime? @map("archived_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  workspace  Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  user       User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  messages Message[]
+  runs     Run[]
+
+  @@index([workspaceId, departmentId, updatedAt])
+  @@map("conversation")
+}
+
+enum MessageRole {
+  user
+  assistant
+  system
+  tool
+
+  @@map("message_role")
+}
+
+model Message {
+  id             String      @id @default(uuid()) @db.Uuid
+  conversationId String      @map("conversation_id") @db.Uuid
+  role           MessageRole
+  content        String
+  /// AI SDK message parts (tool calls, reasoning, files) preserved verbatim so
+  /// the transcript can be replayed exactly as it was rendered.
+  parts          Json?
+  /// Links the message back to the run that produced it, for "why did it say this".
+  runId          String?     @map("run_id") @db.Uuid
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("message")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Work
+// ═══════════════════════════════════════════════════════════════════
+
+enum GoalHorizon {
+  annual
+  quarterly
+  monthly
+  weekly
+
+  @@map("goal_horizon")
+}
+
+enum GoalStatus {
+  active
+  achieved
+  missed
+  abandoned
+
+  @@map("goal_status")
+}
+
+model Goal {
+  id          String      @id @default(uuid()) @db.Uuid
+  workspaceId String      @map("workspace_id") @db.Uuid
+  title       String
+  description String?
+  horizon     GoalHorizon
+  status      GoalStatus  @default(active)
+  /// Which department owns delivery. Null means the CEO holds it directly.
+  ownerKey    DepartmentKey? @map("owner_key")
+  targetDate  DateTime?   @map("target_date") @db.Date
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  kpis      Kpi[]
+  tasks     Task[]
+
+  @@index([workspaceId, status])
+  @@map("goal")
+}
+
+enum KpiDirection {
+  /// Higher is better (revenue, signups).
+  up
+  /// Lower is better (churn, cost per lead).
+  down
+
+  @@map("kpi_direction")
+}
+
+model Kpi {
+  id          String       @id @default(uuid()) @db.Uuid
+  workspaceId String       @map("workspace_id") @db.Uuid
+  goalId      String?      @map("goal_id") @db.Uuid
+  key         String
+  name        String
+  unit        String?
+  direction   KpiDirection @default(up)
+  target      Decimal?     @db.Decimal(18, 4)
+  ownerKey    DepartmentKey? @map("owner_key")
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  goal      Goal?         @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  snapshots KpiSnapshot[]
+
+  @@unique([workspaceId, key])
+  @@map("kpi")
+}
+
+/// Time series. One row per measurement, never updated in place, so a chart
+/// can always be reconstructed exactly as it was seen.
+model KpiSnapshot {
+  id         String   @id @default(uuid()) @db.Uuid
+  kpiId      String   @map("kpi_id") @db.Uuid
+  value      Decimal  @db.Decimal(18, 4)
+  observedAt DateTime @map("observed_at")
+  source     String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  kpi Kpi @relation(fields: [kpiId], references: [id], onDelete: Cascade)
+
+  @@unique([kpiId, observedAt])
+  @@index([kpiId, observedAt])
+  @@map("kpi_snapshot")
+}
+
+enum TaskStatus {
+  backlog
+  todo
+  in_progress
+  blocked
+  in_review
+  done
+  cancelled
+
+  @@map("task_status")
+}
+
+enum TaskPriority {
+  low
+  medium
+  high
+  urgent
+
+  @@map("task_priority")
+}
+
+model Task {
+  id          String       @id @default(uuid()) @db.Uuid
+  workspaceId String       @map("workspace_id") @db.Uuid
+  goalId      String?      @map("goal_id") @db.Uuid
+  /// Department responsible for doing the work.
+  departmentId String?     @map("department_id") @db.Uuid
+  /// Department (or run) that created it — delegation is visible in the data.
+  createdByDepartmentId String? @map("created_by_department_id") @db.Uuid
+  runId       String?      @map("run_id") @db.Uuid
+
+  title       String
+  description String?
+  status      TaskStatus   @default(todo)
+  priority    TaskPriority @default(medium)
+  dueAt       DateTime?    @map("due_at")
+  completedAt DateTime?    @map("completed_at")
+  /// Free-form labels for filtering; deliberately not a join table.
+  tags        String[]     @default([])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  workspace           Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  goal                Goal?       @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  department          Department? @relation("TaskDepartment", fields: [departmentId], references: [id], onDelete: SetNull)
+  createdByDepartment Department? @relation("TaskCreatedBy", fields: [createdByDepartmentId], references: [id], onDelete: SetNull)
+  run                 Run?        @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  events       TaskEvent[]
+  dependsOn    TaskDependency[] @relation("TaskDependent")
+  dependedOnBy TaskDependency[] @relation("TaskBlocker")
+
+  @@index([workspaceId, status, dueAt])
+  @@index([departmentId, status])
+  @@map("task")
+}
+
+/// `taskId` cannot start until `blockedByTaskId` is done.
+model TaskDependency {
+  taskId          String @map("task_id") @db.Uuid
+  blockedByTaskId String @map("blocked_by_task_id") @db.Uuid
+
+  task      Task @relation("TaskDependent", fields: [taskId], references: [id], onDelete: Cascade)
+  blockedBy Task @relation("TaskBlocker", fields: [blockedByTaskId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, blockedByTaskId])
+  @@index([blockedByTaskId])
+  @@map("task_dependency")
+}
+
+model TaskEvent {
+  id           String   @id @default(uuid()) @db.Uuid
+  taskId       String   @map("task_id") @db.Uuid
+  /// 'created' | 'status_changed' | 'reassigned' | 'commented' | 'blocked'
+  kind         String
+  /// Actor: a department key, or 'user'.
+  actor        String
+  detail       Json?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
+  @@map("task_event")
+}
+
+enum ReportKind {
+  daily_brief
+  weekly_review
+  research
+  campaign
+  financial
+  incident
+  custom
+
+  @@map("report_kind")
+}
+
+/// The unit departments hand back to the CEO.
+model Report {
+  id           String     @id @default(uuid()) @db.Uuid
+  workspaceId  String     @map("workspace_id") @db.Uuid
+  departmentId String     @map("department_id") @db.Uuid
+  runId        String?    @map("run_id") @db.Uuid
+  kind         ReportKind
+  title        String
+  /// Markdown. Rendered in the UI and re-ingested into memory.
+  body         String
+  /// Structured findings the dashboard can read without parsing prose.
+  highlights   Json?
+  periodStart  DateTime?  @map("period_start")
+  periodEnd    DateTime?  @map("period_end")
+  readAt       DateTime?  @map("read_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  workspace  Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  run        Run?       @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([departmentId, kind, createdAt])
+  @@map("report")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Long-term memory
+// ═══════════════════════════════════════════════════════════════════
+
+enum MemorySourceKind {
+  note
+  document
+  conversation
+  meeting
+  report
+  research
+  email
+  web
+  code
+
+  @@map("memory_source_kind")
+}
+
+/// The canonical source. Chunks hang off this; re-ingesting replaces chunks
+/// without losing the document identity or its links.
+model MemoryDocument {
+  id           String           @id @default(uuid()) @db.Uuid
+  workspaceId  String           @map("workspace_id") @db.Uuid
+  /// Department that contributed it. Null for user-supplied documents.
+  departmentId String?          @map("department_id") @db.Uuid
+  kind         MemorySourceKind
+  title        String
+  /// Full original text. Chunks are derived; this is the thing of record.
+  content      String
+  /// Namespaces controlling which departments may retrieve it.
+  scopes       String[]         @default([])
+  /// Provenance: file path, URL, message id, whatever identifies the origin.
+  sourceRef    String?          @map("source_ref")
+  /// Content hash, so re-ingesting identical text is a no-op.
+  contentHash  String           @map("content_hash")
+  metadata     Json?
+  ingestedAt   DateTime?        @map("ingested_at")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+
+  workspace  Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  chunks MemoryChunk[]
+  links  MemoryLink[]
+
+  @@unique([workspaceId, contentHash])
+  @@index([workspaceId, kind, createdAt])
+  @@index([scopes], type: Gin)
+  /// Trigram index for fuzzy title lookup in the memory browser.
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@map("memory_document")
+}
+
+/// The retrievable unit.
+///
+/// `embedding vector(1536)` and the generated `fts tsvector` column are added by
+/// a raw SQL migration — Prisma can express neither. They are declared here as
+/// Unsupported so the model is complete and `prisma migrate` leaves them alone.
+model MemoryChunk {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  documentId  String   @map("document_id") @db.Uuid
+  /// Position within the document, so retrieved chunks can be re-assembled.
+  index       Int
+  content     String
+  /// Heading path at this point in the document, e.g. ["Q3 plan", "Pricing"].
+  headings    String[] @default([])
+  tokenCount  Int      @map("token_count")
+  scopes      String[] @default([])
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  embedding Unsupported("vector(1536)")?
+  fts       Unsupported("tsvector")?
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  document  MemoryDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, index])
+  @@index([workspaceId])
+  /// Scope filtering runs on every search, so the array overlap operator needs support.
+  @@index([scopes], type: Gin)
+  @@map("memory_chunk")
+}
+
+enum MemoryLinkTarget {
+  goal
+  task
+  department
+  report
+  run
+  contact
+  project
+
+  @@map("memory_link_target")
+}
+
+/// Typed edges from a document to the things it is about. This is what makes
+/// "show me everything related to this goal" a query rather than a search.
+model MemoryLink {
+  id         String           @id @default(uuid()) @db.Uuid
+  documentId String           @map("document_id") @db.Uuid
+  target     MemoryLinkTarget
+  targetId   String           @map("target_id")
+  /// e.g. 'mentions', 'decides', 'supersedes'
+  relation   String           @default("mentions")
+  createdAt  DateTime         @default(now()) @map("created_at")
+
+  document MemoryDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, target, targetId, relation])
+  @@index([target, targetId])
+  @@map("memory_link")
+}
+
+/// Distilled, durable statements — "prefers concise writing", "target €50k MRR".
+/// Written by a consolidation job, not by every run, so the set stays small
+/// enough to inject into every prompt.
+model MemoryFact {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  statement   String
+  /// 0..1. Decays when unreinforced; a fact below the floor stops being injected.
+  confidence  Float    @default(0.6)
+  scopes      String[] @default([])
+  /// Document ids that support this fact.
+  evidence    String[] @default([])
+  /// Number of times the consolidation job has re-observed it.
+  observations Int     @default(1)
+  lastSeenAt  DateTime @default(now()) @map("last_seen_at")
+  supersededById String? @map("superseded_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, confidence])
+  @@index([scopes], type: Gin)
+  @@map("memory_fact")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Integrations
+// ═══════════════════════════════════════════════════════════════════
+
+enum ConnectionStatus {
+  connected
+  disconnected
+  error
+  expired
+
+  @@map("connection_status")
+}
+
+model IntegrationConnection {
+  id          String           @id @default(uuid()) @db.Uuid
+  workspaceId String           @map("workspace_id") @db.Uuid
+  /// Connector id: 'gmail', 'github', 'stripe', 'slack', …
+  connectorId String           @map("connector_id")
+  displayName String           @map("display_name")
+  status      ConnectionStatus @default(disconnected)
+  /// Capabilities actually granted, which may be narrower than requested.
+  capabilities String[]        @default([])
+  /// Non-secret connector settings.
+  config      Json             @default("{}")
+  lastCheckedAt DateTime?      @map("last_checked_at")
+  lastError   String?          @map("last_error")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  workspace  Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  credential IntegrationCredential?
+  webhooks   WebhookEvent[]
+
+  @@unique([workspaceId, connectorId])
+  @@map("integration_connection")
+}
+
+/// Split from the connection so a query that lists integrations never loads
+/// ciphertext, and so this table can be locked down independently.
+model IntegrationCredential {
+  connectionId String    @id @map("connection_id") @db.Uuid
+  /// AES-256-GCM envelope: { v, iv, tag, ciphertext }. Never logged, never
+  /// returned to the client, never included in an audit_log payload.
+  ciphertext   Bytes
+  /// Key version, so credentials survive a key rotation.
+  keyVersion   Int       @default(1) @map("key_version")
+  expiresAt    DateTime? @map("expires_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  connection IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@map("integration_credential")
+}
+
+/// Inbound webhooks are recorded before they are processed, so a provider
+/// retry is idempotent and a failed handler can be replayed.
+model WebhookEvent {
+  id           String    @id @default(uuid()) @db.Uuid
+  connectionId String    @map("connection_id") @db.Uuid
+  /// Provider's own event id, used for deduplication.
+  externalId   String    @map("external_id")
+  eventType    String    @map("event_type")
+  payload      Json
+  signatureOk  Boolean   @map("signature_ok")
+  processedAt  DateTime? @map("processed_at")
+  error        String?
+  receivedAt   DateTime  @default(now()) @map("received_at")
+
+  connection IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, externalId])
+  @@index([processedAt])
+  @@map("webhook_event")
 }
