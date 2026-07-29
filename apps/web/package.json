@@ -21,6 +21,7 @@
     "@nexusai/core": "workspace:*",
     "@nexusai/db": "workspace:*",
     "@nexusai/ui": "workspace:*",
+    "better-auth": "catalog:",
     "dotenv": "catalog:",
     "lucide-react": "catalog:",
     "motion": "catalog:",

@@ -13,13 +13,22 @@ const config: NextConfig = {
   reactStrictMode: true,
 
   /**
-   * Self-contained server bundle for the Docker image. Vercel ignores this,
-   * so keeping it on costs nothing and keeps the self-host path working.
+   * Self-contained server bundle for the Docker image, opt-in via
+   * BUILD_STANDALONE=1 (set in infra/docker/Dockerfile.web).
+   *
+   * Not always-on, because it is actively harmful during development: standalone
+   * copies the workspace into apps/web/.next/standalone, pnpm's symlink then
+   * exposes that copy *inside* node_modules, and Turbopack walks into it and
+   * fails to resolve workspace packages against the stale tree.
    */
-  output: 'standalone',
-  // In a monorepo, tracing must start at the workspace root or shared packages
-  // are omitted from the standalone output.
-  outputFileTracingRoot: fileURLToPath(new URL('../..', import.meta.url)),
+  ...(process.env['BUILD_STANDALONE'] === '1'
+    ? {
+        output: 'standalone' as const,
+        // In a monorepo, tracing must start at the workspace root or shared
+        // packages are omitted from the standalone output.
+        outputFileTracingRoot: fileURLToPath(new URL('../..', import.meta.url)),
+      }
+    : {}),
 
   /**
    * Cache Components: routes render a prerendered static shell and stream the

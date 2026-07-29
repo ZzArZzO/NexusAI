@@ -28,6 +28,9 @@ COPY . .
 # The build never connects to anything; real values are injected at runtime.
 ENV SKIP_ENV_VALIDATION=1
 ENV NEXT_TELEMETRY_DISABLED=1
+# Opt into the self-contained server bundle. Off by default because it breaks
+# Turbopack dev — see the comment in apps/web/next.config.ts.
+ENV BUILD_STANDALONE=1
 RUN pnpm --filter @nexusai/db generate && pnpm --filter @nexusai/web build
 
 # --- runtime ---

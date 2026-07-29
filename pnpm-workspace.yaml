@@ -40,8 +40,7 @@ catalog:
   '@prisma/config': 7.9.1
   pg: 8.22.0
   '@types/pg': 8.20.0
-  '@supabase/supabase-js': 2.111.0
-  '@supabase/ssr': 0.12.4
+  better-auth: 1.6.25
 
   # --- agents / orchestration ---
   ai: 7.0.41

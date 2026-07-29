@@ -2,7 +2,7 @@ import { nodeVitestConfig } from '@nexusai/config/vitest/node'
 
 export default nodeVitestConfig({
   test: {
-    include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'tests/**/*.test.ts', 'prisma/**/*.test.ts'],
     passWithNoTests: true,
     // Integration tests share one database, so they cannot run concurrently:
     // `resetDatabase` truncates every table.

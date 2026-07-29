@@ -1,4 +1,4 @@
-﻿import { fileURLToPath } from 'node:url'
+import { fileURLToPath } from 'node:url'
 
 import { config } from 'dotenv'
 import { defineConfig } from 'prisma/config'

@@ -1,4 +1,5 @@
 export * from './domain/department'
 export * from './domain/risk'
 export * from './errors'
+export * from './policy'
 export { EnvironmentValidationError, parseEnv } from './env/parse'

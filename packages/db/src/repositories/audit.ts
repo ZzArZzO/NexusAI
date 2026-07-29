@@ -8,15 +8,22 @@ import { type Prisma } from '../../generated/client'
  * edited, it is not an audit log — so the only exported write is `record`.
  */
 
-export interface AuditActor {
-  /** A person acted. */
-  userId?: string
-  /** An agent acted. Exactly one of the two is set. */
-  departmentId?: string
-}
+/**
+ * Who acted. Exactly one of the three, which is why this is a union rather than
+ * three optional fields — "both set" and "none set" are not representable.
+ */
+export type AuditActor =
+  /** A person. */
+  | { userId: string }
+  /** An agent. */
+  | { departmentId: string }
+  /** A named scheduled job. Named, because an anonymous change is the one audit
+   *  entry nobody can ever explain. */
+  | { system: string }
 
-export interface RecordAuditParams extends AuditActor {
+export interface RecordAuditParams {
   workspaceId: string
+  actor: AuditActor
   /** Verb, past tense: 'created', 'approved', 'published', 'deleted'. */
   action: string
   /** Dotted resource type: 'task', 'memory.document', 'approval'. */
@@ -28,23 +35,27 @@ export interface RecordAuditParams extends AuditActor {
 }
 
 export async function record(prisma: PrismaClient, params: RecordAuditParams): Promise<void> {
-  if (params.userId === undefined && params.departmentId === undefined) {
-    throw new Error('An audit entry must name an actor: either userId or departmentId.')
-  }
+  const { actor } = params
+
+  const attribution =
+    'userId' in actor
+      ? { userId: actor.userId }
+      : 'departmentId' in actor
+        ? { departmentId: actor.departmentId }
+        : {}
+
+  const systemMetadata = 'system' in actor ? { systemJob: actor.system } : {}
 
   await prisma.auditLog.create({
     data: {
       workspaceId: params.workspaceId,
       action: params.action,
       resource: params.resource,
-      ...(params.userId === undefined ? {} : { userId: params.userId }),
-      ...(params.departmentId === undefined ? {} : { departmentId: params.departmentId }),
+      ...attribution,
       ...(params.resourceId === undefined ? {} : { resourceId: params.resourceId }),
       ...(params.before === undefined ? {} : { before: params.before as Prisma.InputJsonValue }),
       ...(params.after === undefined ? {} : { after: params.after as Prisma.InputJsonValue }),
-      ...(params.metadata === undefined
-        ? {}
-        : { metadata: params.metadata as Prisma.InputJsonValue }),
+      metadata: { ...systemMetadata, ...(params.metadata ?? {}) } as Prisma.InputJsonValue,
     },
   })
 }
