@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The pipeline compiles and lints but never connects to a real service.
+  SKIP_ENV_VALIDATION: '1'
+  NEXT_TELEMETRY_DISABLED: '1'
+  TURBO_TELEMETRY_DISABLED: '1'
+
+jobs:
+  verify:
+    name: Lint · Typecheck · Test · Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+  migrations:
+    name: Migrations apply cleanly
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: nexus
+          POSTGRES_PASSWORD: nexus
+          POSTGRES_DB: nexusai_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U nexus -d nexusai_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://nexus:nexus@localhost:5432/nexusai_ci?schema=public
+      DIRECT_DATABASE_URL: postgresql://nexus:nexus@localhost:5432/nexusai_ci?schema=public
+      SHADOW_DATABASE_URL: postgresql://nexus:nexus@localhost:5432/nexusai_ci_shadow?schema=public
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Bootstrap extensions and shadow database
+        env:
+          PGPASSWORD: nexus
+        run: |
+          psql -h localhost -U nexus -d nexusai_ci -f infra/sql/bootstrap/001_extensions.sql
+          psql -h localhost -U nexus -d nexusai_ci -v ON_ERROR_STOP=1 \
+            -c "CREATE DATABASE nexusai_ci_shadow"
+          psql -h localhost -U nexus -d nexusai_ci_shadow -f infra/sql/bootstrap/001_extensions.sql
+
+      - name: Apply migrations
+        run: pnpm db:migrate:deploy
+
+      - name: Fail if the schema has drifted from its migrations
+        run: pnpm db:migrate:check
+
+      - name: Seed
+        run: pnpm db:seed

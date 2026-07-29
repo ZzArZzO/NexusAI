@@ -1,0 +1,50 @@
+// NexusAI — baseline schema (Phase 0).
+//
+// Phase 1 expands this with the full platform, agent-runtime, work and memory
+// models. What is here now exists to prove the migrate/generate/seed pipeline
+// end to end, and to hold the settings the kill switch reads.
+//
+// Vector columns, HNSW indexes, RLS policies and RPC functions are NOT declared
+// here — they live in `infra/sql/` and are applied as raw SQL migrations, because
+// Prisma cannot express them. Prisma owns the relational shape; SQL owns the rest.
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../generated"
+  importFileExtension = ""
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// A tenant boundary. Single-user today, but every row in the system hangs off
+/// a workspace so multi-user is a data question rather than a migration.
+model Workspace {
+  id        String   @id @default(uuid()) @db.Uuid
+  slug      String   @unique
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  settings SystemSetting[]
+
+  @@map("workspace")
+}
+
+/// Operational switches read at the head of every workflow — most importantly
+/// the global PAUSE that halts all autonomous agent execution.
+model SystemSetting {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  key         String
+  value       Json
+  description String?
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, key])
+  @@index([workspaceId])
+  @@map("system_setting")
+}

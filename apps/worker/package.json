@@ -1,0 +1,40 @@
+{
+  "name": "@nexusai/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Long-running Node process for work that must outlive a serverless request: embedding backfills, heavy ingestion, scheduled maintenance.",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsup",
+    "start": "node dist/index.js",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "clean": "rimraf dist .turbo coverage *.tsbuildinfo"
+  },
+  "comment:dependencies": "Bundling inlines @nexusai/* into dist, so every module left external becomes an import the WORKER itself must resolve — even those originally required by core or db. With pnpm's isolated node_modules, undeclared transitive packages are simply absent at runtime. This list must stay in sync with `external` in tsup.config.ts.",
+  "dependencies": {
+    "@nexusai/core": "workspace:*",
+    "@nexusai/db": "workspace:*",
+    "@prisma/adapter-pg": "catalog:",
+    "@prisma/client": "catalog:",
+    "dotenv": "catalog:",
+    "pg": "catalog:",
+    "pino": "catalog:",
+    "pino-pretty": "catalog:"
+  },
+  "devDependencies": {
+    "@nexusai/config": "workspace:*",
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "eslint": "catalog:",
+    "rimraf": "6.1.2",
+    "tsup": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

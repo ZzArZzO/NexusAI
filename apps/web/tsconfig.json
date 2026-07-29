@@ -1,0 +1,20 @@
+{
+  "extends": "@nexusai/config/tsconfig/nextjs.json",
+  "compilerOptions": {
+    // No `baseUrl`: deprecated in TypeScript 6, removed in 7. Path mappings
+    // resolve relative to this file instead.
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    ".next/types/**/*.ts",
+    "e2e/**/*.ts",
+    "*.config.ts",
+    "vitest.setup.ts"
+  ],
+  "exclude": ["node_modules", ".next", "coverage"]
+}

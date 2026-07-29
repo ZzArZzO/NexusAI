@@ -1,0 +1,35 @@
+{
+  "name": "@nexusai/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Domain types, schemas, environment validation and pure business logic. No workspace dependencies — this is the bottom of the stack.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./env/server": "./src/env/server.ts",
+    "./env/client": "./src/env/client.ts",
+    "./logger": "./src/logger.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "clean": "rimraf dist .turbo coverage *.tsbuildinfo"
+  },
+  "dependencies": {
+    "pino": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@nexusai/config": "workspace:*",
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "eslint": "catalog:",
+    "pino-pretty": "catalog:",
+    "rimraf": "6.1.2",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

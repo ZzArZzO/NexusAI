@@ -1,0 +1,50 @@
+# syntax=docker/dockerfile:1.7
+
+# Multi-stage build for the Next.js app. Kept working from day one so the
+# Vercel deployment never becomes a one-way door.
+
+FROM node:24-alpine AS base
+RUN corepack enable pnpm
+WORKDIR /app
+
+# --- deps: install with a warm, cacheable store ---
+FROM base AS deps
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY apps/web/package.json apps/web/
+COPY apps/worker/package.json apps/worker/
+COPY packages/config/package.json packages/config/
+COPY packages/core/package.json packages/core/
+COPY packages/db/package.json packages/db/
+COPY packages/ui/package.json packages/ui/
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm config set store-dir /pnpm/store && pnpm install --frozen-lockfile
+
+# --- build ---
+FROM base AS builder
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
+COPY --from=deps /app/packages ./packages
+COPY . .
+# The build never connects to anything; real values are injected at runtime.
+ENV SKIP_ENV_VALIDATION=1
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN pnpm --filter @nexusai/db generate && pnpm --filter @nexusai/web build
+
+# --- runtime ---
+FROM base AS runner
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
+
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
+
+USER nextjs
+EXPOSE 3000
+ENV PORT=3000 HOSTNAME=0.0.0.0
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+CMD ["node", "apps/web/server.js"]

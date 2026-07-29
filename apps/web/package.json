@@ -1,0 +1,50 @@
+{
+  "name": "@nexusai/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "NexusAI web application — dashboard, department consoles, approvals, API routes.",
+  "scripts": {
+    "dev": "next dev --turbopack --port 3200",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "clean": "rimraf .next .turbo coverage test-results playwright-report *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@nexusai/core": "workspace:*",
+    "@nexusai/db": "workspace:*",
+    "@nexusai/ui": "workspace:*",
+    "dotenv": "catalog:",
+    "lucide-react": "catalog:",
+    "motion": "catalog:",
+    "next": "catalog:",
+    "next-themes": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@nexusai/config": "workspace:*",
+    "@playwright/test": "catalog:",
+    "@tailwindcss/postcss": "catalog:",
+    "@testing-library/jest-dom": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "eslint": "catalog:",
+    "jsdom": "catalog:",
+    "rimraf": "6.1.2",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

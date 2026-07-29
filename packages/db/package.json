@@ -1,0 +1,44 @@
+{
+  "name": "@nexusai/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Prisma schema, migrations and the repository layer. The only package that talks to Postgres.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts"
+  },
+  "scripts": {
+    "generate": "prisma generate",
+    "migrate": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "migrate:check": "tsx scripts/check-drift.ts",
+    "seed": "tsx prisma/seed.ts",
+    "studio": "prisma studio",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "clean": "rimraf dist .turbo coverage generated *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@nexusai/core": "workspace:*",
+    "@prisma/adapter-pg": "catalog:",
+    "@prisma/client": "catalog:",
+    "pg": "catalog:"
+  },
+  "devDependencies": {
+    "@nexusai/config": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "dotenv": "catalog:",
+    "eslint": "catalog:",
+    "prisma": "catalog:",
+    "rimraf": "6.1.2",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

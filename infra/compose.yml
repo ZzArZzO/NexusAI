@@ -1,0 +1,87 @@
+name: nexusai
+
+# Local development stack. Mirrors the managed services used in production
+# (Supabase Postgres + pgvector, object storage, durable job engine) so that
+# "works locally" means something.
+#
+# Host ports are deliberately offset from the defaults (55432 rather than 5432,
+# and so on) so this stack can run alongside other projects on the same machine
+# without a port fight. Container-internal ports stay standard.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: nexusai-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nexus
+      POSTGRES_PASSWORD: nexus
+      POSTGRES_DB: nexusai
+      # Match Supabase's collation so local ordering matches production.
+      POSTGRES_INITDB_ARGS: '--locale-provider=icu --icu-locale=en-US --encoding=UTF8'
+    ports:
+      - '55432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Runs once on an empty volume: installs extensions before any migration.
+      - ./sql/bootstrap:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U nexus -d nexusai']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    container_name: nexusai-redis
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '56379:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Stands in for Supabase Storage locally.
+  minio:
+    image: minio/minio:latest
+    container_name: nexusai-minio
+    restart: unless-stopped
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: nexus
+      MINIO_ROOT_PASSWORD: nexussecret
+    ports:
+      - '59000:9000'
+      - '59001:9001'
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Durable workflow engine. The dev server discovers functions by polling the
+  # app's /api/inngest endpoint, so it needs to reach the host.
+  inngest:
+    image: inngest/inngest:latest
+    container_name: nexusai-inngest
+    restart: unless-stopped
+    command: ['inngest', 'dev', '-u', 'http://host.docker.internal:3200/api/inngest']
+    ports:
+      - '58288:8288'
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:

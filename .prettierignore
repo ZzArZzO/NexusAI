@@ -1,0 +1,9 @@
+node_modules
+.next
+.turbo
+dist
+build
+generated
+coverage
+pnpm-lock.yaml
+*.md.tmp

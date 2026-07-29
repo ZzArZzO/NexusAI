@@ -1,0 +1,9 @@
+{
+  "extends": "@nexusai/config/tsconfig/react-library.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "."
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "*.config.ts", "vitest.setup.ts"],
+  "exclude": ["node_modules", "dist", "coverage"]
+}

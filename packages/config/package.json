@@ -1,0 +1,41 @@
+{
+  "name": "@nexusai/config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared TypeScript, ESLint and Vitest presets. Every package extends from here so config drift is impossible.",
+  "exports": {
+    "./eslint/base": "./eslint/base.js",
+    "./eslint/next": "./eslint/next.js",
+    "./eslint/react-library": "./eslint/react-library.js",
+    "./tsconfig/base.json": "./tsconfig/base.json",
+    "./tsconfig/node.json": "./tsconfig/node.json",
+    "./tsconfig/nextjs.json": "./tsconfig/nextjs.json",
+    "./tsconfig/react-library.json": "./tsconfig/react-library.json",
+    "./vitest/node": {
+      "types": "./vitest/node.d.ts",
+      "default": "./vitest/node.js"
+    },
+    "./vitest/react": {
+      "types": "./vitest/react.d.ts",
+      "default": "./vitest/react.js"
+    }
+  },
+  "files": [
+    "eslint",
+    "tsconfig",
+    "vitest"
+  ],
+  "dependencies": {
+    "@eslint/js": "catalog:",
+    "@next/eslint-plugin-next": "catalog:",
+    "eslint-config-prettier": "catalog:",
+    "eslint-plugin-react-hooks": "catalog:",
+    "typescript-eslint": "catalog:"
+  },
+  "devDependencies": {
+    "eslint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

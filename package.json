@@ -1,0 +1,43 @@
+{
+  "name": "nexusai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "NexusAI — a personal AI operating system: autonomous departments, shared long-term memory, durable orchestration.",
+  "packageManager": "pnpm@11.17.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "lint:fix": "turbo run lint -- --fix",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:watch": "turbo run test:watch",
+    "test:coverage": "turbo run test:coverage",
+    "test:e2e": "pnpm --filter @nexusai/web test:e2e",
+    "clean": "turbo run clean && rimraf node_modules",
+    "format": "prettier --write \"**/*.{ts,tsx,js,mjs,json,md,yml,yaml,css}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,json,md,yml,yaml,css}\"",
+    "db:generate": "pnpm --filter @nexusai/db generate",
+    "db:migrate": "pnpm --filter @nexusai/db migrate",
+    "db:migrate:deploy": "pnpm --filter @nexusai/db migrate:deploy",
+    "db:migrate:check": "pnpm --filter @nexusai/db migrate:check",
+    "db:seed": "pnpm --filter @nexusai/db seed",
+    "db:studio": "pnpm --filter @nexusai/db studio",
+    "infra:up": "docker compose -f infra/compose.yml up -d",
+    "infra:down": "docker compose -f infra/compose.yml down",
+    "infra:logs": "docker compose -f infra/compose.yml logs -f",
+    "infra:reset": "docker compose -f infra/compose.yml down -v && pnpm infra:up"
+  },
+  "devDependencies": {
+    "@nexusai/config": "workspace:*",
+    "prettier": "catalog:",
+    "prettier-plugin-tailwindcss": "catalog:",
+    "rimraf": "6.1.2",
+    "turbo": "catalog:",
+    "typescript": "catalog:"
+  }
+}

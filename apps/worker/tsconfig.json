@@ -1,0 +1,9 @@
+{
+  "extends": "@nexusai/config/tsconfig/node.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "."
+  },
+  "include": ["src/**/*.ts", "*.config.ts"],
+  "exclude": ["node_modules", "dist", "coverage"]
+}

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "ui": "tui",
+  "globalDependencies": ["**/.env.*local", "tsconfig.json"],
+  "globalEnv": ["NODE_ENV", "CI", "VERCEL", "VERCEL_ENV"],
+  "globalPassThroughEnv": ["DATABASE_URL", "DIRECT_DATABASE_URL"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build", "generate"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true,
+      "dependsOn": ["^generate", "generate"]
+    },
+    "generate": {
+      "cache": false,
+      "outputs": ["generated/**"]
+    },
+    "lint": {
+      "dependsOn": ["^generate", "generate"]
+    },
+    "typecheck": {
+      "dependsOn": ["^generate", "generate"],
+      "outputs": []
+    },
+    "test": {
+      "dependsOn": ["^generate", "generate"],
+      "outputs": []
+    },
+    "test:watch": {
+      "cache": false,
+      "persistent": true
+    },
+    "test:coverage": {
+      "dependsOn": ["^generate", "generate"],
+      "outputs": ["coverage/**"]
+    },
+    "test:e2e": {
+      "cache": false,
+      "dependsOn": ["build"]
+    },
+    "clean": {
+      "cache": false
+    }
+  }
+}

@@ -1,0 +1,45 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+.next/
+out/
+dist/
+build/
+generated/
+*.tsbuildinfo
+
+# turbo
+.turbo/
+
+# env — never commit real secrets
+.env
+.env.*
+!.env.example
+
+# test output
+coverage/
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
+# vercel
+.vercel/
+
+# editor / os
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# local infra volumes
+infra/.data/
