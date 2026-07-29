@@ -88,6 +88,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The seed imports the generated client, which is gitignored.
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
       - name: Bootstrap extensions and shadow database
         env:
           PGPASSWORD: nexus
