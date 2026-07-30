@@ -193,6 +193,25 @@ export async function findRecentRuns(
 }
 
 /** Spend and volume over a window, for the cost panel. */
+/**
+ * Model spend since an instant, in micro-dollars.
+ *
+ * Counts every run regardless of status. A run that failed halfway still burned
+ * tokens, and a budget that only counted successes would understate the bill by
+ * exactly the amount the operator most wants to know about.
+ */
+export async function spendSince(
+  prisma: PrismaClient,
+  params: { workspaceId: string; since: Date },
+): Promise<number> {
+  const result = await prisma.run.aggregate({
+    where: { workspaceId: params.workspaceId, startedAt: { gte: params.since } },
+    _sum: { costMicros: true },
+  })
+
+  return result._sum.costMicros ?? 0
+}
+
 export async function summariseUsage(
   prisma: PrismaClient,
   params: { workspaceId: string; since: Date },

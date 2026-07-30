@@ -1,5 +1,5 @@
 import { loadAgent } from '@nexusai/agents'
-import { canDelegate, DelegationNotPermittedError } from '@nexusai/core'
+import { canDelegate, DelegationNotPermittedError, formatBudget } from '@nexusai/core'
 import { prisma, workspaces } from '@nexusai/db'
 import { NonRetriableError } from 'inngest'
 
@@ -37,12 +37,19 @@ export const runDepartment = inngest.createFunction(
         return { proceed: false as const, reason: 'automation is paused' }
       }
 
-      const budget = await remainingBudgetMicros(workspaceId)
-      if (budget <= 0) {
-        return { proceed: false as const, reason: 'the monthly model budget is exhausted' }
+      // `workspaces.budget` is the one implementation of "are we over budget",
+      // shared with the kernel and the dashboard. This used to be a second local
+      // copy with its own default and its own idea of when a month starts, which
+      // is how a workflow and a UI end up disagreeing about whether work stopped.
+      const budget = await workspaces.budget(prisma, { workspaceId })
+      if (budget.blocksAutonomous) {
+        return {
+          proceed: false as const,
+          reason: `the monthly model budget is exhausted (${formatBudget(budget.spentMicros)} of ${formatBudget(budget.limitMicros ?? 0)})`,
+        }
       }
 
-      return { proceed: true as const, budgetMicros: budget }
+      return { proceed: true as const, remainingMicros: budget.remainingMicros }
     })
 
     if (!gate.proceed) {
@@ -109,25 +116,15 @@ export const delegateTask = inngest.createFunction(
 /**
  * Remaining model spend for the calendar month, in micro-dollars.
  *
- * A budget that is checked but never enforced is a number on a dashboard. This is
- * the enforcement point, and it is at the head of a run deliberately: stopping
- * halfway leaves side effects with nobody to finish them.
+ * Kept as a named export because it reads well at call sites and because the
+ * scheduled functions want the number rather than the whole status. It delegates
+ * to `workspaces.budget` — there is one implementation of this question, and this
+ * is a view onto it, not a second answer.
+ *
+ * `Infinity` when no limit is set, so `remaining > 0` is a correct test in every
+ * case rather than only when a limit happens to exist.
  */
 export async function remainingBudgetMicros(workspaceId: string): Promise<number> {
-  const ceiling = await workspaces.getSetting<number>(prisma, {
-    workspaceId,
-    key: 'automation.monthly_budget_micros',
-    fallback: 100_000_000,
-  })
-
-  const monthStart = new Date()
-  monthStart.setDate(1)
-  monthStart.setHours(0, 0, 0, 0)
-
-  const spent = await prisma.run.aggregate({
-    where: { workspaceId, startedAt: { gte: monthStart } },
-    _sum: { costMicros: true },
-  })
-
-  return Math.max(0, ceiling - (spent._sum.costMicros ?? 0))
+  const status = await workspaces.budget(prisma, { workspaceId })
+  return status.remainingMicros ?? Number.POSITIVE_INFINITY
 }

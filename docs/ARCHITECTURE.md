@@ -137,34 +137,59 @@ RBAC from day one so multi-user later is configuration, not surgery:
 `workspace → membership → role → permission`, with permissions shaped as
 `resource:action:scope`.
 
-**Prisma connects with a privileged role, which bypasses Postgres RLS.** The
-application `Policy` module is therefore the primary control; RLS is enabled on
-every table as defence in depth for anything reaching Supabase directly
-(Realtime, Storage, the client SDK). A test asserts the two agree.
+**Prisma connects with a privileged role, which bypasses Postgres RLS.** With the
+stack self-hosted, nothing reaches the database except this application, so RLS is
+deliberately deferred and the `Policy` module is the _sole_ authorization control —
+tested accordingly. Re-add RLS if a second client ever talks to Postgres directly.
 
 ## Integrations
 
 ```ts
-interface Connector<TConfig, TClient> {
+interface Connector<TCredential, TClient> {
   id: string
-  auth: 'oauth2' | 'apikey' | 'none'
-  scopes: string[]
-  capabilities: Capability[]
-  connect(cred: Credential): Promise<TClient>
-  tools(client: TClient): ToolDefinition[]
+  auth: 'oauth2' | 'apikey' | 'basic' | 'none'
+  scopes: readonly string[]
+  capabilities: readonly Capability[]
+  credentialSchema: z.ZodType<TCredential>
+  connect(credential: TCredential, config?: unknown): Promise<TClient>
+  /** Static and client-free, so the registry builds with no network call. */
+  tools(): ConnectorTool[]
+  /** Only for tools that must be asked of a live endpoint — an MCP server. */
+  discoverTools?(client: TClient): Promise<ConnectorTool[]>
   healthCheck(client: TClient): Promise<HealthStatus>
+  verifyWebhook?(request: WebhookRequest, secret: string): WebhookVerification
 }
 ```
 
-Adding Slack is one folder plus a registry entry; its tools appear automatically
-to departments granted its capabilities. Credentials are envelope-encrypted at
-rest (AES-256-GCM), never logged, never returned to the client.
+Adding Slack is one folder plus a registry entry. Three properties carry the
+design:
 
-MCP servers are a connector type, so MCP tools flow through the identical risk
-tier and audit path as native ones.
+- **A connector never owns an execution path.** It declares tools; the agents layer
+  wraps each in the same `defineTool` as a native one, so `gmail.send` is gated by
+  exactly the same code as `outreach.send`. There is no second route outward.
+- **Grants are by capability, not by tool name**, because names depend on what is
+  connected and an MCP server's names are unknowable until it answers. Connecting a
+  provider grants nothing by itself.
+- **The client is an argument, not a closure.** `tools()` is synchronous and
+  client-free so building the registry costs no network call; a credential is
+  decrypted only inside `withClient`, per call, and never reaches a caller.
+
+Credentials are AES-256-GCM in a self-describing binary envelope with a key ring,
+so rotation does not make existing rows unreadable. MCP tools default to `external`
+— we cannot inspect a remote tool, so unknown means gated.
+
+## Spend limits
+
+`run.cost_micros` is integer micro-dollars. One function, `workspaces.budget()`,
+answers "are we over budget" for the kernel, the workflow layer and the dashboard
+alike. Autonomous runs refuse to start at the limit; interactive chat continues and
+the agent is told. See [ADR 0002](ADR/0002-spend-limits-and-cookie-scheme.md) for
+why that asymmetry is deliberate.
 
 ## Related
 
+- [Runbook: operating it, and what to do when it breaks](RUNBOOK.md)
 - [Roadmap and phase plan](../README.md)
 - [Raw SQL: what lives outside Prisma](../infra/sql/README.md)
 - [ADR 0001: foundation stack](ADR/0001-foundation-stack.md)
+- [ADR 0002: spend limits and cookie scheme](ADR/0002-spend-limits-and-cookie-scheme.md)

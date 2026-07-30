@@ -14,6 +14,7 @@ import {
   MicroscopeIcon,
   PlugIcon,
   ShieldCheckIcon,
+  SlidersHorizontalIcon,
   TargetIcon,
   WaypointsIcon,
   type LucideIcon,
@@ -45,6 +46,14 @@ export interface NavItem {
   icon: LucideIcon
   /** Shown in the command palette to disambiguate similar names. */
   hint?: string
+  /**
+   * Match the path exactly rather than by prefix.
+   *
+   * Needed where one entry's href is a prefix of another's: without it, visiting
+   * `/settings/integrations` highlights both rows, and a sidebar that claims you
+   * are in two places is worse than one that claims neither.
+   */
+  exact?: boolean
 }
 
 /**
@@ -71,6 +80,13 @@ export const SETTINGS_NAV: NavItem[] = [
     label: 'Integrations',
     icon: PlugIcon,
     hint: 'Connect the outside world',
+  },
+  {
+    href: '/settings',
+    label: 'Settings',
+    icon: SlidersHorizontalIcon,
+    hint: 'Spend limit and automation',
+    exact: true,
   },
 ]
 
@@ -101,7 +117,8 @@ export function DepartmentIcon({
   return <Icon className={className} aria-hidden />
 }
 
-/** True when `href` is the active route, treating '/' as exact. */
-export function isActive(pathname: string, href: string): boolean {
-  return href === '/' ? pathname === '/' : pathname.startsWith(href)
+/** True when `href` is the active route. '/' and `exact` entries match exactly. */
+export function isActive(pathname: string, href: string, exact = false): boolean {
+  if (href === '/' || exact) return pathname === href
+  return pathname.startsWith(href)
 }

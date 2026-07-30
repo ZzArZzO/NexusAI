@@ -1,4 +1,11 @@
-import { departmentActor, type DepartmentId, type RiskTier } from '@nexusai/core'
+import {
+  budgetRefusalMessage,
+  departmentActor,
+  formatBudget,
+  type BudgetStatus,
+  type DepartmentId,
+  type RiskTier,
+} from '@nexusai/core'
 import { audit, runs as runRepo, workspaces, type PrismaClient } from '@nexusai/db'
 import type { ConnectorRegistry } from '@nexusai/integrations'
 import {
@@ -73,6 +80,20 @@ export class AutomationPausedError extends Error {
   }
 }
 
+/**
+ * Thrown when an autonomous run would spend past the monthly limit.
+ *
+ * A distinct error type rather than a variant of the pause: the workflow layer
+ * treats it as non-retriable, and "paused" and "out of money" call for different
+ * actions from the operator.
+ */
+export class BudgetExceededError extends Error {
+  constructor(readonly status: BudgetStatus) {
+    super(budgetRefusalMessage(status))
+    this.name = 'BudgetExceededError'
+  }
+}
+
 const HOUR_MS = 60 * 60 * 1000
 
 /**
@@ -99,7 +120,7 @@ export class DepartmentAgent {
    * ask for, when there is a clear query — a first turn that spends a tool call
    * discovering it should have searched is a wasted round trip.
    */
-  private systemPrompt(memoryContext: string | null): string {
+  private systemPrompt(memoryContext: string | null, budget?: BudgetStatus): string {
     const { spec } = this.options
 
     const parts = [
@@ -111,6 +132,14 @@ export class DepartmentAgent {
       this.options.router.live
         ? ''
         : 'NOTE: you are running on a mock model with no API key configured. Say so if asked why your answers seem thin.',
+      // Told, not hidden. An agent that knows the company is near its spend limit
+      // can offer a shorter answer or say the work should wait — an agent that does
+      // not know will cheerfully propose a research project.
+      budget?.state === 'exceeded'
+        ? `NOTE: this workspace is over its monthly model budget (${formatBudget(budget.spentMicros)} of ${formatBudget(budget.limitMicros ?? 0)}). Scheduled work is stopped. Keep answers short and say so if the operator asks you to start something substantial.`
+        : budget?.state === 'warning'
+          ? `NOTE: this workspace has used ${formatBudget(budget.spentMicros)} of its ${formatBudget(budget.limitMicros ?? 0)} monthly model budget. Prefer the cheapest way to answer.`
+          : '',
     ]
 
     if (memoryContext) {
@@ -212,6 +241,19 @@ export class DepartmentAgent {
       throw new AutomationPausedError()
     }
 
+    /**
+     * The spend brake, checked here and not inside the tools.
+     *
+     * Same reasoning as the pause: refusing before the first step means nothing
+     * half-happened. Note that `stream()` has no equivalent check — an over-budget
+     * workspace still lets the operator talk to their own company, because locking
+     * them out punishes the person who can actually decide what to do about it.
+     */
+    const budget = await workspaces.budget(prisma, { workspaceId })
+    if (budget.blocksAutonomous) {
+      throw new BudgetExceededError(budget)
+    }
+
     const { model, modelId } = router.language('reasoning')
     const memory = await this.prefetchMemory(params.objective)
 
@@ -227,7 +269,7 @@ export class DepartmentAgent {
     try {
       const result = await generateText({
         model,
-        system: this.systemPrompt(memory.context),
+        system: this.systemPrompt(memory.context, budget),
         prompt: params.objective,
         tools: await this.buildTools(run.id, this.options.discoverRemoteTools ?? true),
         stopWhen: isStepCount(spec.maxSteps),
@@ -279,7 +321,14 @@ export class DepartmentAgent {
     const { prisma, router, spec, workspaceId } = this.options
 
     const { model, modelId } = router.language('drafting')
-    const memory = await this.prefetchMemory(params.userQuery)
+
+    // Read but not enforced. Chat continues over budget — the operator is the one
+    // who decides what to do about it — but the agent is told, so it can keep its
+    // answer short and say why rather than proposing more work.
+    const [memory, budget] = await Promise.all([
+      this.prefetchMemory(params.userQuery),
+      workspaces.budget(prisma, { workspaceId }),
+    ])
 
     const run = await runRepo.startRun(prisma, {
       workspaceId,
@@ -291,7 +340,7 @@ export class DepartmentAgent {
 
     const result = streamText({
       model,
-      system: this.systemPrompt(memory.context),
+      system: this.systemPrompt(memory.context, budget),
       messages: params.messages,
       tools: await this.buildTools(run.id, false),
       stopWhen: isStepCount(spec.maxSteps),

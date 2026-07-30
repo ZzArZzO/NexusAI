@@ -1,9 +1,11 @@
+import { formatBudget } from '@nexusai/core'
 import { hasModelProviders } from '@nexusai/core/env/server'
 import { prisma, runs as runRepo, tasks as taskRepo, workspaces } from '@nexusai/db'
 import { Badge, buttonVariants, EmptyState, SkeletonText } from '@nexusai/ui'
 import { formatDistanceToNowStrict } from 'date-fns'
 import {
   BrainIcon,
+  CircleDollarSignIcon,
   CpuIcon,
   DatabaseIcon,
   InboxIcon,
@@ -263,7 +265,7 @@ async function ActiveTasks({ workspaceId, now }: { workspaceId: string; now: num
 async function SystemHealth({ workspaceId }: { workspaceId: string }) {
   const since = new Date(serverNow() - 30 * DAY_MS)
 
-  const [databaseOk, memoryStats, usage, paused] = await Promise.all([
+  const [databaseOk, memoryStats, usage, paused, budget] = await Promise.all([
     prisma.$queryRaw`SELECT 1`.then(() => true).catch(() => false),
     prisma.$queryRaw<{ chunks: bigint; embedded: bigint }[]>`
       SELECT count(*) AS chunks, count(embedding) AS embedded
@@ -271,6 +273,7 @@ async function SystemHealth({ workspaceId }: { workspaceId: string }) {
     `,
     runRepo.summariseUsage(prisma, { workspaceId, since }),
     workspaces.isAutomationPaused(prisma, workspaceId),
+    workspaces.budget(prisma, { workspaceId }),
   ])
 
   const chunks = Number(memoryStats[0]?.chunks ?? 0)
@@ -305,11 +308,31 @@ async function SystemHealth({ workspaceId }: { workspaceId: string }) {
           detail={paused ? 'paused' : 'running'}
           icon={InboxIcon}
         />
+        {/* The row is present whether or not a limit is set. "unlimited" is a
+            state the operator should be able to see, not an absence they have to
+            infer from a missing row. */}
+        <HealthRow
+          label="Model budget"
+          ok={budget.state === 'ok' || budget.state === 'unlimited'}
+          detail={
+            budget.limitMicros === null
+              ? 'unlimited'
+              : `${formatBudget(budget.spentMicros)} / ${formatBudget(budget.limitMicros)}`
+          }
+          icon={CircleDollarSignIcon}
+        />
       </div>
 
-      <p className="mt-3 font-mono text-xs text-muted-foreground">
-        ${(spendMicros / 1_000_000).toFixed(2)} spent in 30 days
-      </p>
+      {budget.state === 'exceeded' ? (
+        <p className="mt-3 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          Over the monthly limit. Scheduled work is stopped; you can still talk to the departments.
+          Raise the limit in Settings, or wait for the month to roll over.
+        </p>
+      ) : (
+        <p className="mt-3 font-mono text-xs text-muted-foreground">
+          {formatBudget(spendMicros)} spent in 30 days
+        </p>
+      )}
     </Panel>
   )
 }

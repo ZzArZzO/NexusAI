@@ -215,6 +215,78 @@ describe.skipIf(!hasTestDatabase)('department agent', () => {
     expect(await prisma.run.count({ where: { workspaceId: fixture.workspaceId } })).toBe(0)
   })
 
+  test('an over-budget workspace refuses to start an autonomous run', async () => {
+    const prisma = testPrisma()
+
+    // A limit of zero: the honest way to express "no autonomous spending", and
+    // distinct from an absent setting, which means no limit at all.
+    await prisma.systemSetting.create({
+      data: {
+        workspaceId: fixture.workspaceId,
+        key: 'automation.monthly_budget_micros',
+        value: 0,
+      },
+    })
+
+    const agent = await loadAgent({
+      prisma,
+      workspaceId: fixture.workspaceId,
+      department: 'ceo',
+      router,
+    })
+
+    await expect(agent.run({ objective: 'Do something', trigger: 'schedule' })).rejects.toThrow(
+      /budget/i,
+    )
+
+    expect(await prisma.run.count({ where: { workspaceId: fixture.workspaceId } })).toBe(0)
+  })
+
+  test('chat still works when the budget is exhausted', async () => {
+    const prisma = testPrisma()
+
+    await prisma.systemSetting.create({
+      data: {
+        workspaceId: fixture.workspaceId,
+        key: 'automation.monthly_budget_micros',
+        value: 0,
+      },
+    })
+
+    const agent = await loadAgent({
+      prisma,
+      workspaceId: fixture.workspaceId,
+      department: 'ceo',
+      router,
+    })
+
+    // The asymmetry, asserted: automation stops, the operator is not locked out.
+    // Locking them out punishes the only person who can decide what to do about it.
+    const { result } = await agent.stream({
+      messages: [{ role: 'user', content: 'Are we over budget?' }],
+      userQuery: 'Are we over budget?',
+    })
+
+    await result.consumeStream()
+    expect(await result.text).toBeTruthy()
+  })
+
+  test('an absent limit does not stop the company', async () => {
+    const prisma = testPrisma()
+
+    // Direction of the default matters: a missing setting must fail *open*, for
+    // the same reason the pause switch defaults to off.
+    const agent = await loadAgent({
+      prisma,
+      workspaceId: fixture.workspaceId,
+      department: 'ceo',
+      router,
+    })
+
+    const run = await agent.run({ objective: 'Say hello', trigger: 'manual' })
+    expect(run.runId).toBeTruthy()
+  })
+
   test('a department cannot be given a tool that does not exist', async () => {
     const prisma = testPrisma()
 

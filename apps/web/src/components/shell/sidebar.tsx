@@ -81,7 +81,7 @@ export function Sidebar({ workspaceName, departments, pendingApprovals }: Sideba
           <li key={item.href}>
             <NavLink
               href={item.href}
-              active={isActive(pathname, item.href)}
+              active={isActive(pathname, item.href, item.exact)}
               icon={<item.icon className="size-4" aria-hidden />}
               label={item.label}
             />

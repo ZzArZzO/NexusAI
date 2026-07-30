@@ -1,6 +1,7 @@
-import type { DepartmentId } from '@nexusai/core'
+import { budgetStatus, monthStart, type BudgetStatus, type DepartmentId } from '@nexusai/core'
 
 import type { PrismaClient } from '../client'
+import * as runs from './run'
 import { type Prisma } from '../../generated/client'
 
 /** Keys of the settings the runtime reads. Typo-proofing what would otherwise be strings. */
@@ -92,4 +93,38 @@ export async function isAutomationPaused(
     key: SETTING.automationPaused,
     fallback: false,
   })
+}
+
+/**
+ * This month's model spend against the configured limit.
+ *
+ * One function, read by both the kernel (to decide whether an autonomous run may
+ * start) and the dashboard (to show the operator where they are). Two
+ * implementations of "are we over budget" would eventually disagree, and the
+ * version the UI shows is the one the operator would trust.
+ *
+ * A missing limit means unlimited, and that direction of default is deliberate:
+ * an absent setting must not silently stop the company, for the same reason the
+ * pause switch defaults to off.
+ */
+export async function budget(
+  prisma: PrismaClient,
+  params: { workspaceId: string; now?: Date },
+): Promise<BudgetStatus> {
+  const now = params.now ?? new Date()
+
+  const [limit, spent] = await Promise.all([
+    getSetting<number | null>(prisma, {
+      workspaceId: params.workspaceId,
+      key: SETTING.monthlyBudgetMicros,
+      fallback: null,
+    }),
+    runs.spendSince(prisma, { workspaceId: params.workspaceId, since: monthStart(now) }),
+  ])
+
+  // A malformed setting is treated as unset rather than as zero. Reading a typo in
+  // a JSON column as "spend nothing" would halt the company on a bad edit.
+  const limitMicros = typeof limit === 'number' && Number.isFinite(limit) ? limit : null
+
+  return budgetStatus(spent, limitMicros)
 }
