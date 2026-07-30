@@ -7,3 +7,8 @@ generated
 coverage
 pnpm-lock.yaml
 *.md.tmp
+
+# Written by `next build` and marked "should not be edited". It is tracked, so
+# format:check sees it — and Next rewrites it with its own quote style on every
+# build, so formatting it only gets undone by the next one.
+apps/web/next-env.d.ts
