@@ -8,6 +8,7 @@ allowBuilds:
   '@prisma/engines': true # query/migration engine binaries
   esbuild: true # native bundler binary (used by Vitest)
   prisma: true # CLI post-install
+  protobufjs: true # Inngest's transport dependency; generates its runtime descriptors
   sharp: true # native image pipeline (Next.js image optimisation)
 
 # Single source of truth for third-party versions across every workspace package.

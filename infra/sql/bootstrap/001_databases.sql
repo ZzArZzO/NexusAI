@@ -26,3 +26,10 @@ WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'nexusai_test')
 SELECT 'CREATE DATABASE nexusai_test_agents'
 WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'nexusai_test_agents')
 \gexec
+
+-- Inngest's own state: queues, step results, paused workflows. Separate from the
+-- application's database because Inngest owns its schema and migrates it itself
+-- — mixing them would put two migration systems in one namespace.
+SELECT 'CREATE DATABASE inngest'
+WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'inngest')
+\gexec

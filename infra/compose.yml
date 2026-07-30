@@ -1,7 +1,7 @@
 name: nexusai
 
-# Local development stack. Mirrors the managed services used in production
-# (Supabase Postgres + pgvector, object storage, durable job engine) so that
+# Local development stack. Mirrors the managed services this could run on
+# (Postgres + pgvector, object storage, durable job engine) so that
 # "works locally" means something.
 #
 # Host ports are deliberately offset from the defaults (55432 rather than 5432,
@@ -17,13 +17,13 @@ services:
       POSTGRES_USER: nexus
       POSTGRES_PASSWORD: nexus
       POSTGRES_DB: nexusai
-      # Match Supabase's collation so local ordering matches production.
       POSTGRES_INITDB_ARGS: '--locale-provider=icu --icu-locale=en-US --encoding=UTF8'
     ports:
       - '55432:5432'
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      # Runs once on an empty volume: installs extensions before any migration.
+      # Runs once on an empty volume: creates the auxiliary databases before any
+      # migration. Extensions are installed by the migration itself.
       - ./sql/bootstrap:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U nexus -d nexusai']
@@ -46,7 +46,7 @@ services:
       timeout: 3s
       retries: 10
 
-  # Stands in for Supabase Storage locally.
+  # Object storage. Stands in for S3; the application only speaks S3's API.
   minio:
     image: minio/minio:latest
     container_name: nexusai-minio
@@ -66,19 +66,38 @@ services:
       timeout: 5s
       retries: 10
 
-  # Durable workflow engine. The dev server discovers functions by polling the
-  # app's /api/inngest endpoint, so it needs to reach the host.
+  # ─────────────────────────────────────────────────────────────────
+  # Inngest, in production mode.
+  #
+  # `inngest start` rather than `inngest dev`: the dev server keeps state in
+  # memory and SQLite, which is not durable enough to build approval gates on. A
+  # workflow parked for three days waiting on a human has to survive a restart,
+  # or the gate is theatre.
+  #
+  # It gets its own database on the same Postgres instance, and shares Redis.
+  # ─────────────────────────────────────────────────────────────────
   inngest:
     image: inngest/inngest:latest
     container_name: nexusai-inngest
     restart: unless-stopped
-    command: ['inngest', 'dev', '-u', 'http://host.docker.internal:3200/api/inngest']
+    command: ['inngest', 'start']
+    environment:
+      INNGEST_EVENT_KEY: ${INNGEST_EVENT_KEY:-6e657875736169206576656e74206b6579}
+      INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY:-6e6578757361692073696720206b6579aa}
+      INNGEST_POSTGRES_URI: postgres://nexus:nexus@postgres:5432/inngest?sslmode=disable
+      INNGEST_REDIS_URI: redis://redis:6379
+      # Where Inngest finds the application's functions. host.docker.internal
+      # resolves to the host from inside the container.
+      INNGEST_SDK_URL: http://host.docker.internal:3200/api/inngest
     ports:
-      - '58288:8288'
+      - '58288:8288' # dashboard and API
+      - '58289:8289' # connect gateway
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
 volumes:

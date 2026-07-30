@@ -1,0 +1,29 @@
+{
+  "extends": "@nexusai/config/tsconfig/node.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": ".",
+
+    /*
+     * Relaxed here for the same reason as in packages/agents: Inngest's step and
+     * event types are not authored for exactOptionalPropertyTypes, and it rejects
+     * correct usage at every step boundary. It stays on everywhere else.
+     */
+    "exactOptionalPropertyTypes": false,
+
+    /*
+     * No declaration emit.
+     *
+     * Inngest's function types are deeply inferred and reference types it does not
+     * re-export, so `tsc` cannot name them in a .d.ts and fails with TS2883. The
+     * honest fix is to stop emitting declarations nobody consumes: this package
+     * ships TypeScript source and its consumers compile it themselves.
+     *
+     * Type checking is unaffected — `tsc --noEmit` still checks everything.
+     */
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "*.config.ts"],
+  "exclude": ["node_modules", "dist", "coverage"]
+}

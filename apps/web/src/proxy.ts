@@ -17,7 +17,10 @@ import { COOKIE_PREFIX } from '@/lib/auth-shared'
  * cookie gets past this and is then rejected there.
  */
 
-const PUBLIC_PATHS = ['/sign-in', '/sign-up', '/api/auth', '/api/health']
+// /api/inngest is public to the session layer because Inngest authenticates with
+// a signing key, not a cookie. It is not unauthenticated — it is authenticated
+// differently, and by the SDK rather than by us.
+const PUBLIC_PATHS = ['/sign-in', '/sign-up', '/api/auth', '/api/health', '/api/inngest']
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl

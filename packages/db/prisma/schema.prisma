@@ -54,6 +54,30 @@ model Workspace {
   memoryFacts    MemoryFact[]
   integrations   IntegrationConnection[]
 
+  // Department domain data. Every one of these hangs off the workspace so a
+  // single cascade removes a tenant completely.
+  companies      Company[]
+  contacts       Contact[]
+  deals          Deal[]
+  activities     Activity[]
+  sequences      Sequence[]
+  campaigns      Campaign[]
+  contentItems   ContentItem[]
+  scheduleSlots  ScheduleSlot[]
+  tickets        Ticket[]
+  kbArticles     KbArticle[]
+  accounts       FinancialAccount[]
+  transactions   Transaction[]
+  subscriptions  Subscription[]
+  budgets        Budget[]
+  forecasts      Forecast[]
+  repositories   Repository[]
+  incidents      Incident[]
+  calendarEvents CalendarEvent[]
+  notes          Note[]
+  reminders      Reminder[]
+  sources        Source[]
+
   @@map("workspace")
 }
 
@@ -609,9 +633,10 @@ model Goal {
   createdAt   DateTime    @default(now()) @map("created_at")
   updatedAt   DateTime    @updatedAt @map("updated_at")
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   kpis      Kpi[]
   tasks     Task[]
+  campaigns Campaign[]
 
   @@index([workspaceId, status])
   @@map("goal")
@@ -782,6 +807,7 @@ model Report {
   workspace  Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
   run        Run?       @relation(fields: [runId], references: [id], onDelete: SetNull)
+  sources    Source[]
 
   @@index([workspaceId, createdAt])
   @@index([departmentId, kind, createdAt])
@@ -1003,4 +1029,602 @@ model WebhookEvent {
   @@unique([connectionId, externalId])
   @@index([processedAt])
   @@map("webhook_event")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Sales
+// ═══════════════════════════════════════════════════════════════════
+
+model Company {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  name        String
+  domain      String?
+  /// Free-form; a fixed industry taxonomy is a classification problem nobody asked for.
+  industry    String?
+  size        String?
+  notes       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contacts  Contact[]
+  deals     Deal[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+  @@map("company")
+}
+
+model Contact {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  companyId   String?  @map("company_id") @db.Uuid
+  name        String
+  email       String?
+  role        String?
+  linkedinUrl String?  @map("linkedin_url")
+  /// 0-100. Meaningless unless `scoreReason` explains it, which is why both exist.
+  score       Int      @default(0)
+  scoreReason String?  @map("score_reason")
+  /// Where they came from: 'inbound', 'research', 'referral', 'import'.
+  source      String?
+  notes       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  workspace   Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  company     Company?              @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  deals       Deal[]
+  activities  Activity[]
+  enrollments SequenceEnrollment[]
+
+  @@unique([workspaceId, email])
+  @@index([workspaceId, score])
+  @@map("contact")
+}
+
+enum DealStage {
+  lead
+  qualified
+  proposal
+  negotiation
+  won
+  lost
+
+  @@map("deal_stage")
+}
+
+model Deal {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  companyId   String?   @map("company_id") @db.Uuid
+  contactId   String?   @map("contact_id") @db.Uuid
+  title       String
+  stage       DealStage @default(lead)
+  /// Integer cents. Money never touches a float.
+  valueCents  Int       @default(0) @map("value_cents")
+  currency    String    @default("EUR")
+  /// 0-100. Used for the weighted forecast, so a guess here becomes a guess there.
+  probability Int       @default(10)
+  expectedCloseAt DateTime? @map("expected_close_at")
+  closedAt    DateTime? @map("closed_at")
+  lostReason  String?   @map("lost_reason")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  workspace  Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  company    Company?   @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  contact    Contact?   @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  activities Activity[]
+
+  @@index([workspaceId, stage])
+  @@index([workspaceId, expectedCloseAt])
+  @@map("deal")
+}
+
+/// Anything that happened with a person: a call, an email, a meeting, a note.
+model Activity {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  contactId   String?  @map("contact_id") @db.Uuid
+  dealId      String?  @map("deal_id") @db.Uuid
+  /// 'note' | 'email' | 'call' | 'meeting' | 'message'
+  kind        String
+  /// 'in' | 'out' | 'internal' — who initiated.
+  direction   String   @default("internal")
+  summary     String
+  body        String?
+  occurredAt  DateTime @map("occurred_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact   Contact?  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  deal      Deal?     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, occurredAt])
+  @@index([contactId, occurredAt])
+  @@map("activity")
+}
+
+/// A reusable outreach sequence. Steps are drafted; sending is always gated.
+model Sequence {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  name        String
+  description String?
+  active      Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace   Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  steps       SequenceStep[]
+  enrollments SequenceEnrollment[]
+
+  @@unique([workspaceId, name])
+  @@map("sequence")
+}
+
+model SequenceStep {
+  id         String @id @default(uuid()) @db.Uuid
+  sequenceId String @map("sequence_id") @db.Uuid
+  index      Int
+  /// Days after the previous step.
+  delayDays  Int    @default(3)
+  channel    String @default("email")
+  subject    String?
+  body       String
+
+  sequence Sequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+
+  @@unique([sequenceId, index])
+  @@map("sequence_step")
+}
+
+model SequenceEnrollment {
+  id          String    @id @default(uuid()) @db.Uuid
+  sequenceId  String    @map("sequence_id") @db.Uuid
+  contactId   String    @map("contact_id") @db.Uuid
+  currentStep Int       @default(0) @map("current_step")
+  /// 'active' | 'paused' | 'completed' | 'replied' | 'stopped'
+  status      String    @default("active")
+  nextDueAt   DateTime? @map("next_due_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  sequence Sequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  contact  Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([sequenceId, contactId])
+  @@index([status, nextDueAt])
+  @@map("sequence_enrollment")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Marketing
+// ═══════════════════════════════════════════════════════════════════
+
+model Campaign {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  goalId      String?   @map("goal_id") @db.Uuid
+  name        String
+  brief       String?
+  /// 'draft' | 'active' | 'paused' | 'done'
+  status      String    @default("draft")
+  startsAt    DateTime? @map("starts_at")
+  endsAt      DateTime? @map("ends_at")
+  budgetCents Int?      @map("budget_cents")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  goal      Goal?         @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  content   ContentItem[]
+
+  @@unique([workspaceId, name])
+  @@map("campaign")
+}
+
+enum ContentStatus {
+  idea
+  drafting
+  review
+  approved
+  scheduled
+  published
+  archived
+
+  @@map("content_status")
+}
+
+model ContentItem {
+  id          String        @id @default(uuid()) @db.Uuid
+  workspaceId String        @map("workspace_id") @db.Uuid
+  campaignId  String?       @map("campaign_id") @db.Uuid
+  /// 'tweet' | 'thread' | 'linkedin' | 'instagram' | 'tiktok' | 'youtube' | 'blog' | 'newsletter'
+  format      String
+  title       String
+  body        String?
+  /// The opening line, kept separate because it is the part worth iterating on.
+  hook        String?
+  callToAction String?      @map("call_to_action")
+  status      ContentStatus @default(idea)
+  /// Never set by an agent — publishing is gated, so this is written by the
+  /// connector after the operator approved it.
+  publishedAt DateTime?     @map("published_at")
+  externalUrl String?       @map("external_url")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  campaign  Campaign?       @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  slots     ScheduleSlot[]
+  metrics   ContentMetric[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, publishedAt])
+  @@map("content_item")
+}
+
+model ScheduleSlot {
+  id            String    @id @default(uuid()) @db.Uuid
+  workspaceId   String    @map("workspace_id") @db.Uuid
+  contentItemId String    @map("content_item_id") @db.Uuid
+  channel       String
+  scheduledFor  DateTime  @map("scheduled_for")
+  /// 'planned' | 'awaiting_approval' | 'published' | 'skipped'
+  status        String    @default("planned")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, scheduledFor])
+  @@map("schedule_slot")
+}
+
+model ContentMetric {
+  id            String   @id @default(uuid()) @db.Uuid
+  contentItemId String   @map("content_item_id") @db.Uuid
+  channel       String
+  impressions   Int      @default(0)
+  engagements   Int      @default(0)
+  clicks        Int      @default(0)
+  observedAt    DateTime @map("observed_at")
+
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+
+  @@unique([contentItemId, channel, observedAt])
+  @@map("content_metric")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Support
+// ═══════════════════════════════════════════════════════════════════
+
+enum TicketStatus {
+  open
+  waiting_on_customer
+  waiting_on_us
+  escalated
+  resolved
+  closed
+
+  @@map("ticket_status")
+}
+
+model Ticket {
+  id            String       @id @default(uuid()) @db.Uuid
+  workspaceId   String       @map("workspace_id") @db.Uuid
+  contactId     String?      @map("contact_id") @db.Uuid
+  subject       String
+  status        TicketStatus @default(open)
+  /// 'low' | 'normal' | 'high' | 'urgent'
+  priority      String       @default("normal")
+  /// Why it was escalated. Present exactly when status is escalated.
+  escalationReason String?   @map("escalation_reason")
+  /// Rolling summary, so a long thread does not have to be re-read every time.
+  summary       String?
+  firstReplyAt  DateTime?    @map("first_reply_at")
+  resolvedAt    DateTime?    @map("resolved_at")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  messages  TicketMessage[]
+
+  @@index([workspaceId, status, updatedAt])
+  @@map("ticket")
+}
+
+model TicketMessage {
+  id        String   @id @default(uuid()) @db.Uuid
+  ticketId  String   @map("ticket_id") @db.Uuid
+  /// 'customer' | 'operator' | 'agent'
+  author    String
+  body      String
+  /// True while this is a draft the agent produced and nobody has sent.
+  isDraft   Boolean  @default(false) @map("is_draft")
+  sentAt    DateTime? @map("sent_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_message")
+}
+
+model KbArticle {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  title       String
+  body        String
+  /// Times a ticket has been answered with this. Drives what to write next.
+  useCount    Int      @default(0) @map("use_count")
+  published   Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, title])
+  @@map("kb_article")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Finance
+// ═══════════════════════════════════════════════════════════════════
+
+/// A money account. Named FinancialAccount because Better Auth already owns `Account` — its shape is not ours to rename.
+model FinancialAccount {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  name        String
+  /// 'bank' | 'card' | 'stripe' | 'cash' | 'other'
+  kind        String   @default("bank")
+  currency    String   @default("EUR")
+  /// Integer cents, and derived from transactions rather than trusted as typed.
+  balanceCents Int     @default(0) @map("balance_cents")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@unique([workspaceId, name])
+  @@map("financial_account")
+}
+
+model Transaction {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  accountId   String?  @map("account_id") @db.Uuid
+  /// 'in' | 'out'. Amount is always positive; the direction carries the sign, so
+  /// no query has to remember which way negative means.
+  direction   String
+  amountCents Int      @map("amount_cents")
+  currency    String   @default("EUR")
+  description String
+  category    String?
+  /// 'stripe' | 'import' | 'manual'
+  source      String   @default("manual")
+  /// Provider id, so re-importing the same statement is idempotent.
+  externalId  String?  @map("external_id")
+  occurredAt  DateTime @map("occurred_at")
+  /// Set when Finance decided this looked wrong. Nulled when reviewed.
+  anomalyNote String?  @map("anomaly_note")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  account   FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, source, externalId])
+  @@index([workspaceId, occurredAt])
+  @@index([workspaceId, direction, occurredAt])
+  @@map("transaction")
+}
+
+model Subscription {
+  id             String    @id @default(uuid()) @db.Uuid
+  workspaceId    String    @map("workspace_id") @db.Uuid
+  name           String
+  amountCents    Int       @map("amount_cents")
+  currency       String    @default("EUR")
+  /// 'monthly' | 'yearly'
+  interval       String    @default("monthly")
+  /// 'in' for revenue, 'out' for a cost. Both are recurring and both matter.
+  direction      String    @default("out")
+  nextChargeAt   DateTime? @map("next_charge_at")
+  cancelledAt    DateTime? @map("cancelled_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, name])
+  @@map("subscription")
+}
+
+model Budget {
+  id           String   @id @default(uuid()) @db.Uuid
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  category     String
+  limitCents   Int      @map("limit_cents")
+  /// 'monthly' | 'quarterly' | 'yearly'
+  period       String   @default("monthly")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, category, period])
+  @@map("budget")
+}
+
+model Forecast {
+  id            String   @id @default(uuid()) @db.Uuid
+  workspaceId   String   @map("workspace_id") @db.Uuid
+  /// 'revenue' | 'cash' | 'pipeline'
+  metric        String
+  periodStart   DateTime @map("period_start") @db.Date
+  periodEnd     DateTime @map("period_end") @db.Date
+  amountCents   Int      @map("amount_cents")
+  /// 0-100. A forecast without a stated confidence is a wish.
+  confidence    Int      @default(50)
+  /// How it was arrived at. Required, so the number can be argued with.
+  method        String
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, metric, periodStart])
+  @@map("forecast")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Engineering
+// ═══════════════════════════════════════════════════════════════════
+
+model Repository {
+  id           String   @id @default(uuid()) @db.Uuid
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  /// 'owner/name'
+  fullName     String   @map("full_name")
+  provider     String   @default("github")
+  defaultBranch String  @default("main") @map("default_branch")
+  /// Local path when the repo is checked out on this machine.
+  localPath    String?  @map("local_path")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  reviews   PullRequestReview[]
+
+  @@unique([workspaceId, fullName])
+  @@map("repository")
+}
+
+model PullRequestReview {
+  id           String   @id @default(uuid()) @db.Uuid
+  repositoryId String   @map("repository_id") @db.Uuid
+  runId        String?  @map("run_id") @db.Uuid
+  number       Int
+  title        String
+  /// Markdown review. Drafted, never posted without approval.
+  body         String
+  /// 'approve' | 'request_changes' | 'comment'
+  verdict      String   @default("comment")
+  /// Structured findings, so the UI can show severity without parsing prose.
+  findings     Json?
+  postedAt     DateTime? @map("posted_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@unique([repositoryId, number, createdAt])
+  @@map("pull_request_review")
+}
+
+model Incident {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  title       String
+  /// 'investigating' | 'identified' | 'monitoring' | 'resolved'
+  status      String    @default("investigating")
+  severity    String    @default("minor")
+  summary     String?
+  /// What actually caused it. Empty until known — and saying so is the point.
+  rootCause   String?   @map("root_cause")
+  startedAt   DateTime  @map("started_at")
+  resolvedAt  DateTime? @map("resolved_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, status])
+  @@map("incident")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Personal assistant
+// ═══════════════════════════════════════════════════════════════════
+
+model CalendarEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  title       String
+  description String?
+  location    String?
+  startsAt    DateTime @map("starts_at")
+  endsAt      DateTime @map("ends_at")
+  allDay      Boolean  @default(false) @map("all_day")
+  /// Other people. Their presence is what makes scheduling an external action.
+  attendees   String[] @default([])
+  /// Provider id, so a synced calendar does not duplicate on every poll.
+  externalId  String?  @map("external_id")
+  /// Written after the meeting: decisions and owners, not a transcript.
+  notes       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, externalId])
+  @@index([workspaceId, startsAt])
+  @@map("calendar_event")
+}
+
+model Note {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  title       String
+  body        String
+  /// 'note' | 'idea' | 'meeting' | 'journal'
+  kind        String   @default("note")
+  tags        String[] @default([])
+  /// Set once this has been written into long-term memory, so it is not ingested twice.
+  memoryDocumentId String? @map("memory_document_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@map("note")
+}
+
+model Reminder {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  body        String
+  dueAt       DateTime  @map("due_at")
+  completedAt DateTime? @map("completed_at")
+  /// Set when surfaced, so the same reminder is not raised every sweep.
+  notifiedAt  DateTime? @map("notified_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, dueAt, completedAt])
+  @@map("reminder")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Research
+// ═══════════════════════════════════════════════════════════════════
+
+/// A source Research actually read. Separate from the report so a claim can be
+/// traced to a URL and a date, which is most of what makes research reusable.
+model Source {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  reportId    String?  @map("report_id") @db.Uuid
+  url         String
+  title       String?
+  /// Extracted text, so a dead link does not erase the evidence.
+  excerpt     String?
+  retrievedAt DateTime @map("retrieved_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  report    Report?   @relation(fields: [reportId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, retrievedAt])
+  @@map("source")
 }

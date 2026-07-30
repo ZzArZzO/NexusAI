@@ -2,6 +2,7 @@
 
 import { assert } from '@nexusai/core'
 import { approvals, audit, prisma } from '@nexusai/db'
+import { ApprovalResponded, inngest } from '@nexusai/jobs'
 import { revalidatePath } from 'next/cache'
 
 import { requireActor } from '@/lib/session'
@@ -33,7 +34,7 @@ export async function decideApproval(
   // here rather than assumed from the fact that it rendered.
   const approval = await prisma.approvalRequest.findUnique({
     where: { id: approvalId },
-    select: { workspaceId: true, title: true },
+    select: { workspaceId: true, title: true, risk: true, requiresSecondConfirmation: true },
   })
 
   if (approval?.workspaceId !== workspace.id) {
@@ -56,6 +57,23 @@ export async function decideApproval(
       resourceId: approvalId,
       metadata: { title: approval.title },
     })
+
+    /**
+     * Un-park the workflow.
+     *
+     * Written to the database *first*, then announced. If the event were sent
+     * before the row was committed, a workflow that resumed quickly could read a
+     * still-pending approval and refuse the action the operator just allowed.
+     */
+    await inngest.send(
+      ApprovalResponded.create({
+        workspaceId: workspace.id,
+        approvalId,
+        approved,
+        risk: approval.risk,
+        secondConfirmed: false,
+      }),
+    )
 
     revalidatePath('/approvals')
     revalidatePath('/', 'layout')
@@ -86,7 +104,7 @@ export async function confirmFinancial(approvalId: string): Promise<DecisionResu
 
   const approval = await prisma.approvalRequest.findUnique({
     where: { id: approvalId },
-    select: { workspaceId: true },
+    select: { workspaceId: true, risk: true },
   })
 
   if (approval?.workspaceId !== workspace.id) {
@@ -103,6 +121,18 @@ export async function confirmFinancial(approvalId: string): Promise<DecisionResu
       resource: 'approval',
       resourceId: approvalId,
     })
+
+    // The second signal a financial gate is waiting on. Sent separately from the
+    // approval itself, because two acts is the entire point.
+    await inngest.send(
+      ApprovalResponded.create({
+        workspaceId: workspace.id,
+        approvalId,
+        approved: true,
+        risk: approval.risk,
+        secondConfirmed: true,
+      }),
+    )
 
     revalidatePath('/approvals')
     return { ok: true, message: 'Confirmed. The payment can now proceed.' }

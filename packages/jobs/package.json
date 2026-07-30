@@ -1,0 +1,39 @@
+{
+  "name": "@nexusai/jobs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Durable orchestration: the Inngest client, event schemas and every workflow the company runs.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./events": "./src/events.ts"
+  },
+  "scripts": {
+    "trigger": "tsx scripts/trigger.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "clean": "rimraf dist .turbo coverage *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@nexusai/agents": "workspace:*",
+    "@nexusai/core": "workspace:*",
+    "@nexusai/db": "workspace:*",
+    "inngest": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@nexusai/config": "workspace:*",
+    "@types/node": "catalog:",
+    "dotenv": "catalog:",
+    "tsx": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "eslint": "catalog:",
+    "rimraf": "6.1.2",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
