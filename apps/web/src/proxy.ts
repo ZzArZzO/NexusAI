@@ -40,8 +40,17 @@ export function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // The prefix must match `advanced.cookiePrefix` in auth.ts, which is why both
-  // read it from one constant rather than repeating the string.
+  /**
+   * The prefix must match `advanced.cookiePrefix` in auth.ts, which is why both
+   * read it from one constant rather than repeating the string.
+   *
+   * The `__Secure-` part of the name is not passed: `getSessionCookie` derives it
+   * from the *request's* scheme, and auth.ts derives it from APP_URL. Those agree
+   * as long as APP_URL names the origin the browser actually uses — which is the
+   * same invariant every redirect and OAuth callback already depends on. Set
+   * APP_URL to an https origin while serving plain HTTP and sign-in appears to do
+   * nothing at all.
+   */
   if (getSessionCookie(request, { cookiePrefix: COOKIE_PREFIX })) {
     return NextResponse.next()
   }

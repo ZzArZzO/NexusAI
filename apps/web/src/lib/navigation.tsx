@@ -1,14 +1,18 @@
 import { DEPARTMENT_IDS, DEPARTMENTS, type DepartmentId } from '@nexusai/core'
 import {
+  BrainIcon,
   BriefcaseIcon,
   BuildingIcon,
   CalendarCheckIcon,
   CircleDollarSignIcon,
   CodeIcon,
+  FileTextIcon,
   LayoutDashboardIcon,
   LifeBuoyIcon,
+  ListChecksIcon,
   MegaphoneIcon,
   MicroscopeIcon,
+  PlugIcon,
   ShieldCheckIcon,
   TargetIcon,
   WaypointsIcon,
@@ -43,6 +47,10 @@ export interface NavItem {
   hint?: string
 }
 
+/**
+ * Ordered by how often the operator needs it, not by hierarchy. Approvals sits
+ * second because it is the only entry where the company is *waiting* on them.
+ */
 export const PRIMARY_NAV: NavItem[] = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboardIcon, hint: 'Today at a glance' },
   {
@@ -51,7 +59,19 @@ export const PRIMARY_NAV: NavItem[] = [
     icon: ShieldCheckIcon,
     hint: 'Actions waiting on you',
   },
-  { href: '/memory', label: 'Memory', icon: TargetIcon, hint: 'Everything the company knows' },
+  { href: '/tasks', label: 'Tasks', icon: ListChecksIcon, hint: 'Everything in flight' },
+  { href: '/reports', label: 'Reports', icon: FileTextIcon, hint: 'What the departments filed' },
+  { href: '/goals', label: 'Goals', icon: TargetIcon, hint: 'What we are trying to achieve' },
+  { href: '/memory', label: 'Memory', icon: BrainIcon, hint: 'Everything the company knows' },
+]
+
+export const SETTINGS_NAV: NavItem[] = [
+  {
+    href: '/settings/integrations',
+    label: 'Integrations',
+    icon: PlugIcon,
+    hint: 'Connect the outside world',
+  },
 ]
 
 export const DEPARTMENT_NAV: (NavItem & { key: DepartmentId })[] = DEPARTMENT_IDS.map((key) => ({

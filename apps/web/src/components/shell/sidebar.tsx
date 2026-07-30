@@ -5,7 +5,7 @@ import { Badge, StatusDot, cn, type Status } from '@nexusai/ui'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
-import { DEPARTMENT_NAV, PRIMARY_NAV, isActive } from '@/lib/navigation'
+import { DEPARTMENT_NAV, PRIMARY_NAV, SETTINGS_NAV, isActive } from '@/lib/navigation'
 
 export interface DepartmentStatus {
   key: DepartmentId
@@ -73,6 +73,21 @@ export function Sidebar({ workspaceName, departments, pendingApprovals }: Sideba
           })}
         </ul>
       </div>
+
+      {/* Settings live at the bottom, out of the way: they are configured once and
+          then ignored, unlike everything above them. */}
+      <ul className="flex flex-col gap-0.5 border-t border-sidebar-border pt-3">
+        {SETTINGS_NAV.map((item) => (
+          <li key={item.href}>
+            <NavLink
+              href={item.href}
+              active={isActive(pathname, item.href)}
+              icon={<item.icon className="size-4" aria-hidden />}
+              label={item.label}
+            />
+          </li>
+        ))}
+      </ul>
     </nav>
   )
 }

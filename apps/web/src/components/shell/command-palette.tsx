@@ -4,7 +4,7 @@ import { Command } from 'cmdk'
 import { PauseIcon, PlayIcon, SearchIcon } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
-import { DEPARTMENT_NAV, PRIMARY_NAV } from '@/lib/navigation'
+import { DEPARTMENT_NAV, PRIMARY_NAV, SETTINGS_NAV } from '@/lib/navigation'
 
 interface CommandPaletteProps {
   open: boolean
@@ -83,6 +83,22 @@ export function CommandPalette({
 
           <Group heading="Departments">
             {DEPARTMENT_NAV.map((item) => (
+              <Item
+                key={item.href}
+                value={item.label}
+                onSelect={() => {
+                  go(item.href)
+                }}
+                hint={item.hint}
+              >
+                <item.icon className="size-4" aria-hidden />
+                {item.label}
+              </Item>
+            ))}
+          </Group>
+
+          <Group heading="Settings">
+            {SETTINGS_NAV.map((item) => (
               <Item
                 key={item.href}
                 value={item.label}

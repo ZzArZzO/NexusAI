@@ -18,6 +18,15 @@ const base64Key32 = z
 export const serverEnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   APP_URL: z.url().default('http://localhost:3200'),
+  /**
+   * Extra origins allowed to post to the auth endpoints, comma-separated.
+   *
+   * APP_URL is always trusted. This exists for the cases where the app is
+   * legitimately reached on another origin — a LAN address, a tunnel, or the E2E
+   * server on its own port. Deliberately an allowlist rather than a wildcard: it
+   * is the CSRF boundary.
+   */
+  TRUSTED_ORIGINS: z.string().optional(),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
 
   // --- Database ---

@@ -4,7 +4,7 @@ import { prismaAdapter } from 'better-auth/adapters/prisma'
 import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { nextCookies } from 'better-auth/next-js'
 
-import { COOKIE_PREFIX } from './auth-shared'
+import { COOKIE_PREFIX, USE_SECURE_COOKIES } from './auth-shared'
 
 /**
  * Authentication.
@@ -47,6 +47,32 @@ function requiredSecret(): string {
   )
 }
 
+const BASE_URL = process.env['APP_URL'] ?? 'http://localhost:3200'
+
+/**
+ * Origins allowed to post to the auth endpoints.
+ *
+ * This is the CSRF defence: Better Auth compares the request's `Origin` header
+ * against this list and rejects anything else with "Invalid origin". `baseURL` is
+ * trusted implicitly; everything else has to be named.
+ *
+ * It is an explicit list rather than a `http://localhost:*` wildcard on purpose.
+ * A wildcard would let any other process on this machine that can get a page into
+ * the operator's browser post to these endpoints, and "it's only localhost" is a
+ * weaker boundary than it sounds on a development machine running arbitrary
+ * project servers.
+ *
+ * Set `TRUSTED_ORIGINS` (comma-separated) when the app is legitimately reached on
+ * another origin — a LAN address, a tunnel, or the E2E server on its own port.
+ */
+const TRUSTED_ORIGINS = [
+  BASE_URL,
+  ...(process.env['TRUSTED_ORIGINS'] ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin !== ''),
+]
+
 export const auth = betterAuth({
   /**
    * The lazy `prisma` proxy, not `getPrisma()`.
@@ -59,7 +85,8 @@ export const auth = betterAuth({
    */
   database: prismaAdapter(prisma, { provider: 'postgresql' }),
   secret: requiredSecret(),
-  baseURL: process.env['APP_URL'] ?? 'http://localhost:3200',
+  baseURL: BASE_URL,
+  trustedOrigins: TRUSTED_ORIGINS,
 
   emailAndPassword: {
     enabled: true,
@@ -82,9 +109,16 @@ export const auth = betterAuth({
 
   advanced: {
     cookiePrefix: COOKIE_PREFIX,
-    // Next augments ProcessEnv with a typed NODE_ENV, so this is a known
-    // property rather than an index signature access.
-    useSecureCookies: process.env.NODE_ENV === 'production',
+    /**
+     * Follows the scheme, not NODE_ENV.
+     *
+     * This was `NODE_ENV === 'production'` — the conventional answer, and wrong
+     * here. `next start` sets NODE_ENV=production while this deployment serves
+     * plain HTTP on localhost, so the cookie was issued with `Secure` and the
+     * `__Secure-` prefix, silently discarded by the browser, and every sign-in
+     * bounced back to the sign-in page with nothing to explain it.
+     */
+    useSecureCookies: USE_SECURE_COOKIES,
   },
 
   hooks: {

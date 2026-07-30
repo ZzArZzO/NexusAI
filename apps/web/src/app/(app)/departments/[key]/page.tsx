@@ -1,3 +1,5 @@
+import { Suspense } from 'react'
+
 import { DEFAULT_TOOLS } from '@nexusai/agents'
 import { DEPARTMENTS, departmentIdSchema, type DepartmentId } from '@nexusai/core'
 import { prisma, runs as runRepo } from '@nexusai/db'
@@ -6,14 +8,20 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
 import { DepartmentChat } from '@/components/department/chat'
+import { DomainPanel, DomainPanelFallback, ToolBadges } from '@/components/department/domain-panel'
 import { DepartmentIcon } from '@/lib/navigation'
 import { requireSession } from '@/lib/session'
 
 /**
  * A department console.
  *
- * One page for all nine — they differ by charter and tools, not by interface,
- * which is the visible consequence of one kernel serving all of them.
+ * One page for all nine — they differ by charter, tools and domain panel, not by
+ * interface, which is the visible consequence of one kernel serving all of them.
+ *
+ * Two panes: the conversation, and the state that department owns. The second is
+ * what stops this being a chat window — the pipeline, the ledger and the tickets
+ * are on screen before anyone asks about them, and the chat is for the questions
+ * a table cannot answer.
  */
 
 const SUGGESTIONS: Partial<Record<DepartmentId, string[]>> = {
@@ -88,37 +96,48 @@ export default async function DepartmentPage({ params }: { params: Promise<{ key
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex flex-col gap-3 border-b border-border px-5 py-4">
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
-          <div className="flex items-center gap-3">
-            <DepartmentIcon department={departmentKey} className="size-5 shrink-0 text-primary" />
-            <h1 className="flex-1 text-lg font-semibold tracking-tight">
-              {department.displayName}
-            </h1>
-            <StatusDot status={status} withLabel />
-          </div>
+        <div className="flex items-center gap-3">
+          <DepartmentIcon department={departmentKey} className="size-5 shrink-0 text-primary" />
+          <h1 className="flex-1 text-lg font-semibold tracking-tight">{department.displayName}</h1>
+          <StatusDot status={status} withLabel />
+        </div>
 
-          <p className="text-sm text-muted-foreground">{DEPARTMENTS[departmentKey].remit}</p>
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          {DEPARTMENTS[departmentKey].remit}
+        </p>
 
-          <div className="flex flex-wrap items-center gap-1.5">
-            {tools.map((tool) => (
-              <Badge key={tool} variant="outline" className="font-mono text-[0.65rem]">
-                {tool}
-              </Badge>
-            ))}
-            {scopes.length > 0 ? (
-              <Badge variant="accent" className="font-mono text-[0.65rem]">
-                memory: {scopes.join(', ')}
-              </Badge>
-            ) : null}
-          </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <ToolBadges tools={tools} />
+          {scopes.length > 0 ? (
+            <Badge variant="accent" className="font-mono text-[0.65rem]">
+              memory: {scopes.join(', ')}
+            </Badge>
+          ) : null}
         </div>
       </header>
 
-      <DepartmentChat
-        department={departmentKey}
-        displayName={department.displayName}
-        suggestions={SUGGESTIONS[departmentKey] ?? DEFAULT_SUGGESTIONS}
-      />
+      {/* Chat and domain side by side on a wide screen; stacked below it, with the
+          conversation first, because on a phone the operator came here to ask. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto xl:flex-row xl:overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col xl:overflow-hidden">
+          <DepartmentChat
+            department={departmentKey}
+            displayName={department.displayName}
+            suggestions={SUGGESTIONS[departmentKey] ?? DEFAULT_SUGGESTIONS}
+          />
+        </div>
+
+        <aside className="w-full shrink-0 border-t border-border p-4 xl:w-96 xl:overflow-y-auto xl:border-t-0 xl:border-l">
+          {/* Suspense per pane: a slow ledger query must not delay the chat input. */}
+          <Suspense fallback={<DomainPanelFallback />}>
+            <DomainPanel
+              department={departmentKey}
+              workspaceId={workspace.id}
+              currency={workspace.currency}
+            />
+          </Suspense>
+        </aside>
+      </div>
     </div>
   )
 }

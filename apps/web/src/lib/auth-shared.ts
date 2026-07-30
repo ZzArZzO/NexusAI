@@ -8,3 +8,17 @@
  * broken auth and is actually a mismatched string.
  */
 export const COOKIE_PREFIX = 'nexus'
+
+/**
+ * Whether the session cookie carries the `Secure` attribute and `__Secure-` name
+ * prefix.
+ *
+ * Derived from the scheme rather than from NODE_ENV, because a `__Secure-` cookie
+ * is only accepted by a browser over TLS — and this deployment runs in production
+ * mode behind plain HTTP on localhost. Getting this wrong issues a cookie the
+ * browser silently discards, which presents as "sign-in does nothing".
+ *
+ * Shared for the same reason as the prefix: `auth.ts` decides the cookie's name
+ * and `proxy.ts` has to look for that exact name.
+ */
+export const USE_SECURE_COOKIES = (process.env['APP_URL'] ?? '').startsWith('https://')

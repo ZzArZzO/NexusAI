@@ -23,7 +23,10 @@ test.describe('dashboard', () => {
       'Ready to work',
       'System health',
     ]) {
-      await expect(page.getByText(panel, { exact: true })).toBeVisible()
+      // `.first()` because each panel streams under Suspense, and its fallback
+      // carries the same heading — for a moment both are mounted, and an unscoped
+      // matcher fails on strict mode rather than on anything being wrong.
+      await expect(page.getByText(panel, { exact: true }).first()).toBeVisible()
     }
   })
 
