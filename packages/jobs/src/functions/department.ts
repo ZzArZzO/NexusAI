@@ -50,7 +50,9 @@ export const runDepartment = inngest.createFunction(
     }
 
     const result = await step.run('run-agent', async () => {
-      const agent = await loadAgent({ prisma, workspaceId, department })
+      // Autonomous runs discover remote MCP tools; a chat does not. See
+      // LoadAgentParams.discoverRemoteTools.
+      const agent = await loadAgent({ prisma, workspaceId, department, discoverRemoteTools: true })
 
       return agent.run({
         objective,

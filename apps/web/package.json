@@ -22,6 +22,7 @@
     "@nexusai/agents": "workspace:*",
     "@nexusai/core": "workspace:*",
     "@nexusai/db": "workspace:*",
+    "@nexusai/integrations": "workspace:*",
     "@nexusai/jobs": "workspace:*",
     "@nexusai/ui": "workspace:*",
     "better-auth": "catalog:",

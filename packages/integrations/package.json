@@ -1,17 +1,15 @@
 {
-  "name": "@nexusai/agents",
+  "name": "@nexusai/integrations",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "The agent kernel: DepartmentAgent, the risk-tiered tool registry, the model router, and memory retrieval.",
+  "description": "Connectors to the outside world: one folder per provider behind a single interface, with envelope-encrypted credentials and signature-verified webhooks.",
   "exports": {
     ".": "./src/index.ts",
-    "./models": "./src/models/router.ts",
-    "./tools": "./src/tools/registry.ts",
-    "./memory": "./src/memory/index.ts"
+    "./crypto": "./src/crypto.ts",
+    "./connectors": "./src/connectors/index.ts"
   },
   "scripts": {
-    "embed": "tsx scripts/embed.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -20,23 +18,18 @@
     "clean": "rimraf dist .turbo coverage *.tsbuildinfo"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "catalog:",
-    "@ai-sdk/openai": "catalog:",
     "@nexusai/core": "workspace:*",
     "@nexusai/db": "workspace:*",
-    "@nexusai/integrations": "workspace:*",
-    "ai": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@nexusai/config": "workspace:*",
     "@types/node": "catalog:",
-    "@prisma/adapter-pg": "catalog:",
-    "dotenv": "catalog:",
-    "tsx": "catalog:",
     "@vitest/coverage-v8": "catalog:",
+    "dotenv": "catalog:",
     "eslint": "catalog:",
     "rimraf": "6.1.2",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

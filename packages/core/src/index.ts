@@ -1,3 +1,4 @@
+export * from './domain/capability'
 export * from './domain/department'
 export * from './domain/risk'
 export * from './domain/tools'

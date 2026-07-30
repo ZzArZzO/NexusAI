@@ -17,6 +17,19 @@ export async function findWorkspaceBySlug(prisma: PrismaClient, slug: string) {
   return prisma.workspace.findUnique({ where: { slug } })
 }
 
+/**
+ * The workspace, for code paths that have no session to derive it from — webhook
+ * receivers and scheduled jobs.
+ *
+ * Ordered by creation and taking the first, so it is deterministic rather than
+ * whatever Postgres returns. This system is single-operator by design; when that
+ * stops being true, every caller of this function is a place that needs a real
+ * workspace identifier, and finding them is a grep rather than an audit.
+ */
+export async function getPrimaryWorkspace(prisma: PrismaClient) {
+  return prisma.workspace.findFirst({ orderBy: { createdAt: 'asc' } })
+}
+
 export async function findDepartment(
   prisma: PrismaClient,
   params: { workspaceId: string; key: DepartmentId },

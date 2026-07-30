@@ -31,6 +31,11 @@ export {
   type BuiltinToolOptions,
 } from './tools/builtin'
 export {
+  createConnectorTools,
+  type ConnectorToolOptions,
+  type ConnectorToolSet,
+} from './tools/connectors'
+export {
   defineTool,
   ToolRegistry,
   type AwaitingApproval,

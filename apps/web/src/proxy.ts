@@ -20,7 +20,18 @@ import { COOKIE_PREFIX } from '@/lib/auth-shared'
 // /api/inngest is public to the session layer because Inngest authenticates with
 // a signing key, not a cookie. It is not unauthenticated — it is authenticated
 // differently, and by the SDK rather than by us.
-const PUBLIC_PATHS = ['/sign-in', '/sign-up', '/api/auth', '/api/health', '/api/inngest']
+//
+// /api/webhooks likewise: a provider posts with an HMAC signature over the body,
+// which the connector verifies before the payload is used for anything. An
+// unverified event is stored and never processed — see packages/integrations/webhook.ts.
+const PUBLIC_PATHS = [
+  '/sign-in',
+  '/sign-up',
+  '/api/auth',
+  '/api/health',
+  '/api/inngest',
+  '/api/webhooks',
+]
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl

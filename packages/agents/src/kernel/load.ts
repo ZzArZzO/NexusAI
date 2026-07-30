@@ -1,5 +1,6 @@
 import { DEPARTMENTS, type DepartmentId, type RiskTier } from '@nexusai/core'
 import { SETTING, workspaces, type PrismaClient } from '@nexusai/db'
+import { createConnectorRegistry } from '@nexusai/integrations'
 
 import type { ModelRole, ModelRouter } from '../models/router'
 import { routerFromEnv } from '../models/router'
@@ -48,6 +49,15 @@ export interface LoadAgentParams {
   workspaceId: string
   department: DepartmentId
   router?: ModelRouter
+  /**
+   * Ask connected MCP servers for their tool lists.
+   *
+   * Defaults to false, so an interactive chat never waits on a remote server
+   * before its first token. Autonomous runs pass true — a few hundred milliseconds
+   * is free there, and a scheduled job that silently lacked half its tools would
+   * be much harder to notice than a slow one.
+   */
+  discoverRemoteTools?: boolean
 }
 
 export async function loadAgent(params: LoadAgentParams): Promise<DepartmentAgent> {
@@ -95,6 +105,11 @@ export async function loadAgent(params: LoadAgentParams): Promise<DepartmentAgen
     spec,
     workspaceId,
     approvalTimeoutMs: parseDuration(timeout),
+    // Every agent gets the connector registry. It contributes nothing until the
+    // operator has connected something, and then only the capabilities this
+    // department was granted — so wiring it unconditionally is not a widening.
+    connectors: createConnectorRegistry(),
+    discoverRemoteTools: params.discoverRemoteTools ?? false,
   })
 }
 

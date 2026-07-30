@@ -1,3 +1,4 @@
+import type { Capability } from './capability'
 import type { DepartmentId } from './department'
 
 /**
@@ -140,4 +141,58 @@ export const DEPARTMENT_TOOLS: Readonly<Record<DepartmentId, readonly string[]>>
 
 export function toolsForDepartment(id: DepartmentId): readonly string[] {
   return DEPARTMENT_TOOLS[id]
+}
+
+/**
+ * Which integration capabilities each department may use.
+ *
+ * Connector tools cannot be granted by name, because the names depend on what the
+ * operator has connected — and an MCP server's tool names are not knowable at all
+ * until it answers. So the grant is by capability, and a connector tool reaches a
+ * department only if its declared capability appears here.
+ *
+ * Two consequences worth stating:
+ *
+ *  - Connecting a provider grants nothing new by itself. Slack appearing does not
+ *    give Finance the ability to post; Finance was never granted `chat.send`.
+ *  - `mcp.tools` is granted to nobody. An MCP server's tools are unreviewed by
+ *    construction, so reaching them is an explicit decision the operator makes per
+ *    department, not a default.
+ */
+export const DEPARTMENT_CAPABILITIES: Readonly<Record<DepartmentId, readonly Capability[]>> =
+  Object.freeze({
+    /** Reads everything, sends nothing. The CEO decides; departments act. */
+    ceo: ['email.read', 'calendar.read', 'payments.read', 'docs.read', 'repo.read'],
+
+    /** Coordination needs a channel to say "this is blocked" in. */
+    operations: ['chat.read', 'chat.send', 'docs.read'],
+
+    research: ['docs.read', 'docs.write'],
+
+    marketing: ['social.read', 'social.publish', 'docs.read', 'docs.write'],
+
+    /** Sales owns outbound: mail, calendar for booking, and the CRM. */
+    sales: ['email.read', 'email.send', 'calendar.read', 'calendar.write', 'crm.read', 'crm.write'],
+
+    support: ['email.read', 'email.send', 'docs.read', 'docs.write'],
+
+    /** Read-only on money by design; moving it is Finance's own gated tool. */
+    finance: ['payments.read', 'docs.read'],
+
+    engineering: ['repo.read', 'repo.write', 'chat.read', 'chat.send'],
+
+    assistant: [
+      'email.read',
+      'email.send',
+      'calendar.read',
+      'calendar.write',
+      'files.read',
+      'files.write',
+      'docs.read',
+      'docs.write',
+    ],
+  })
+
+export function capabilitiesForDepartment(id: DepartmentId): readonly Capability[] {
+  return DEPARTMENT_CAPABILITIES[id]
 }

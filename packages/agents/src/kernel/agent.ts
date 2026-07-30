@@ -1,5 +1,6 @@
 import { departmentActor, type DepartmentId, type RiskTier } from '@nexusai/core'
 import { audit, runs as runRepo, workspaces, type PrismaClient } from '@nexusai/db'
+import type { ConnectorRegistry } from '@nexusai/integrations'
 import {
   generateText,
   isStepCount,
@@ -13,6 +14,7 @@ import { costMicros } from '../models/pricing'
 import type { ModelRole, ModelRouter } from '../models/router'
 import { toTokenUsage } from '../models/usage'
 import { createRegistry, DEFAULT_TOOLS } from '../tools/builtin'
+import { createConnectorTools } from '../tools/connectors'
 import type { ToolContext } from '../tools/registry'
 
 /**
@@ -48,6 +50,18 @@ export interface AgentOptions {
   workspaceId: string
   /** Wall-clock a gated action waits before expiring as not-done. */
   approvalTimeoutMs?: number
+  /**
+   * Connector registry. Omitted means no integration tools at all — which is the
+   * correct default for a test, and the honest state of a workspace that has
+   * connected nothing.
+   */
+  connectors?: ConnectorRegistry | undefined
+  /**
+   * Ask connected MCP servers for their tool lists. A network round trip per
+   * server, so it is off for chat and on for autonomous runs, where a few hundred
+   * milliseconds does not matter and completeness does.
+   */
+  discoverRemoteTools?: boolean | undefined
 }
 
 export class AutomationPausedError extends Error {
@@ -127,15 +141,38 @@ export class DepartmentAgent {
     }
   }
 
-  private buildTools(runId: string) {
+  /**
+   * Assemble the tool set for one run.
+   *
+   * Native tools come from the department's allowlist. Connector tools are added by
+   * *capability* instead, because their names depend on what the operator has
+   * connected — and an MCP server's names are not knowable until it answers. Both
+   * kinds go through the same `defineTool` wrapper, so both hit the same gate.
+   */
+  private async buildTools(runId: string, discover: boolean) {
     const registry = createRegistry({
       router: this.options.router,
       scopes: [...this.options.spec.memoryScopes],
     })
 
     const allowlist = this.options.spec.tools.length > 0 ? this.options.spec.tools : DEFAULT_TOOLS
+    const context = this.toolContext(runId)
 
-    return registry.toolsFor(allowlist, this.toolContext(runId))
+    if (!this.options.connectors) {
+      return registry.toolsFor(allowlist, context)
+    }
+
+    const connector = await createConnectorTools({
+      prisma: this.options.prisma,
+      registry: this.options.connectors,
+      workspaceId: this.options.workspaceId,
+      department: this.options.spec.key,
+      discover,
+    })
+
+    registry.register(...connector.tools)
+
+    return registry.toolsFor([...allowlist, ...connector.names], context)
   }
 
   /** Pre-fetch memory when the request obviously needs context. */
@@ -192,7 +229,7 @@ export class DepartmentAgent {
         model,
         system: this.systemPrompt(memory.context),
         prompt: params.objective,
-        tools: this.buildTools(run.id),
+        tools: await this.buildTools(run.id, this.options.discoverRemoteTools ?? true),
         stopWhen: isStepCount(spec.maxSteps),
         onStepFinish: async (step) => {
           await this.recordStep(run.id, step, memory.ids, modelId)
@@ -256,7 +293,7 @@ export class DepartmentAgent {
       model,
       system: this.systemPrompt(memory.context),
       messages: params.messages,
-      tools: this.buildTools(run.id),
+      tools: await this.buildTools(run.id, false),
       stopWhen: isStepCount(spec.maxSteps),
 
       onStepFinish: async (step) => {
