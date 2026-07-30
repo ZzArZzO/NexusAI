@@ -31,15 +31,44 @@ export interface ConnectionSummary {
 
 let cachedRing: KeyRing | undefined
 
-/** The process key ring. Built once; throws loudly if no key is configured. */
+/**
+ * The process key ring, for operations that genuinely need to encrypt or decrypt.
+ * Throws loudly when no key is configured, which is correct: silently proceeding
+ * would mean storing a credential unencrypted or returning an empty one.
+ */
 export function keyRing(): KeyRing {
   cachedRing ??= keyRingFromEnv()
   return cachedRing
 }
 
+/**
+ * The ring if one is configured, or null.
+ *
+ * For read paths that merely *describe* connections. Demanding a key to answer
+ * "which integrations exist" made every agent run crash in an environment without
+ * one — including CI, and including a workspace with no integrations at all, which
+ * is the state before the operator has connected anything. Listing nothing must not
+ * require the ability to decrypt.
+ */
+function optionalKeyRing(): KeyRing | null {
+  try {
+    return keyRing()
+  } catch {
+    return null
+  }
+}
+
 /** Test seam: drop the cached ring so a test can install its own keys. */
 export function resetKeyRing(): void {
   cachedRing = undefined
+}
+
+/** Whether a stored credential is on an older key. False when there is no ring. */
+function needsRekeyFor(keyVersion: number | undefined): boolean {
+  if (keyVersion === undefined) return false
+
+  const ring = optionalKeyRing()
+  return ring === null ? false : needsRotation(keyVersion, ring)
 }
 
 export async function connect(
@@ -247,7 +276,9 @@ export async function listConnections(
     include: { credential: { select: { keyVersion: true, expiresAt: true } } },
   })
 
-  const ring = keyRing()
+  // Optional: listing connections must work before a key is configured. Without
+  // one, nothing can be re-keyed anyway, so `false` is the honest answer.
+  const ring = optionalKeyRing()
 
   return rows.map((row) => ({
     id: row.id,
@@ -257,7 +288,7 @@ export async function listConnections(
     capabilities: row.capabilities,
     lastCheckedAt: row.lastCheckedAt,
     lastError: row.lastError,
-    needsRekey: row.credential ? needsRotation(row.credential.keyVersion, ring) : false,
+    needsRekey: row.credential && ring ? needsRotation(row.credential.keyVersion, ring) : false,
     expiresAt: row.credential?.expiresAt ?? null,
   }))
 }
@@ -336,7 +367,7 @@ async function summarise(prisma: PrismaClient, connectionId: string): Promise<Co
     capabilities: row.capabilities,
     lastCheckedAt: row.lastCheckedAt,
     lastError: row.lastError,
-    needsRekey: row.credential ? needsRotation(row.credential.keyVersion, keyRing()) : false,
+    needsRekey: needsRekeyFor(row.credential?.keyVersion),
     expiresAt: row.credential?.expiresAt ?? null,
   }
 }
