@@ -2,8 +2,8 @@ import { z } from 'zod'
 
 /**
  * The org chart. Every department is an agent; this module holds only the
- * structural facts about them (identity, remit, who they may delegate to).
- * Prompts, tools and models live in `@nexusai/agents`.
+ * structural facts about them (identity, remit, who they may delegate to). Tool
+ * grants are next door in `./tools`; prompts and models live in `@nexusai/agents`.
  */
 export const DEPARTMENT_IDS = [
   'ceo',

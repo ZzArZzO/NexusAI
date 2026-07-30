@@ -1,4 +1,4 @@
-import { DEPARTMENTS, type DepartmentId } from '@nexusai/core'
+import { DEPARTMENT_TOOLS, DEPARTMENTS, type DepartmentId } from '@nexusai/core'
 
 /**
  * Department charters — the system prompt each agent runs under.
@@ -264,23 +264,6 @@ export interface DepartmentSeed {
 }
 
 /**
- * What every department gets in Phase 1.
- *
- * All read or internal — nothing here leaves the system. Later phases add
- * connector tools per department, and those inherit the gate rather than
- * inventing their own path through it.
- */
-const PHASE_1_TOOLS = [
-  'memory.recall',
-  'memory.write',
-  'task.create',
-  'task.update',
-  'task.list',
-  'goal.list',
-  'report.generate',
-]
-
-/**
  * Every department reads the shared `company` scope, plus its own. That is what
  * makes this one company rather than nine assistants: Marketing can see the
  * goals the CEO set, and Sales can see what Research found.
@@ -290,7 +273,7 @@ export const DEPARTMENT_SEEDS: DepartmentSeed[] = (Object.keys(CHARTERS) as Depa
     key,
     displayName: DEPARTMENTS[key].displayName,
     charter: CHARTERS[key],
-    tools: [...PHASE_1_TOOLS],
+    tools: [...DEPARTMENT_TOOLS[key]],
     memoryScopes: key === 'ceo' ? ['company', 'ceo', 'personal'] : ['company', key],
     autoApprove: ['read', 'internal'],
     maxSteps: key === 'ceo' || key === 'operations' ? 16 : 12,

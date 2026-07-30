@@ -1,19 +1,27 @@
-import { canDelegate, departmentIdSchema } from '@nexusai/core'
+import { canDelegate, departmentIdSchema, PLATFORM_TOOLS } from '@nexusai/core'
 import { tasks as taskRepo } from '@nexusai/db'
 import { z } from 'zod'
 
 import { ingest, recall } from '../memory/index'
 import type { ModelRouter } from '../models/router'
+import { createAssistantTools } from './departments/assistant'
+import { createEngineeringTools } from './departments/engineering'
+import { createFinanceTools } from './departments/finance'
+import { createMarketingTools } from './departments/marketing'
+import { createOperationsTools } from './departments/operations'
+import { createResearchTools } from './departments/research'
+import { createSalesTools } from './departments/sales'
+import { createSupportTools } from './departments/support'
 import { defineTool, ToolRegistry, type NexusTool } from './registry'
 
 /**
- * The Phase 1 tool set.
+ * The platform tool set: what every department has, regardless of its remit.
  *
- * Every tool here is `read` or `internal` — nothing yet leaves the system.
- * That is not an oversight: the gate, the approval inbox and the database
- * trigger are all built and tested, so when Gmail and Stripe arrive in later
- * phases they inherit a path that has already been proven rather than one
- * invented alongside them.
+ * Memory, tasks, goals and reports are here because they are how the company
+ * thinks and how it hands work between departments — a department that could not
+ * recall or file anything would be a chatbot with a job title. Everything in this
+ * file is `read` or `internal`; the tools that leave the system live in
+ * `departments/`, one file per remit.
  */
 
 export interface BuiltinToolOptions {
@@ -308,18 +316,34 @@ export function createBuiltinTools(options: BuiltinToolOptions): NexusTool<z.Zod
   ] as NexusTool<z.ZodType>[]
 }
 
-/** Registry preloaded with everything Phase 1 provides. */
+/**
+ * Every tool the system has.
+ *
+ * The registry is built identically for all nine departments and the *allowlist*
+ * decides what each one sees — a department is never handed a registry that
+ * happens to be missing a dangerous tool, because "it wasn't registered" is not
+ * an access control. `toolsFor` throws on a name it does not know, so a typo in a
+ * charter fails loudly at startup instead of silently removing a capability.
+ */
 export function createRegistry(options: BuiltinToolOptions): ToolRegistry {
-  return new ToolRegistry().register(...createBuiltinTools(options))
+  return new ToolRegistry().register(
+    ...createBuiltinTools(options),
+    ...createOperationsTools(),
+    ...createResearchTools({ router: options.router }),
+    ...createMarketingTools(),
+    ...createSalesTools(),
+    ...createFinanceTools(),
+    ...createSupportTools(),
+    ...createEngineeringTools(),
+    ...createAssistantTools(),
+  )
 }
 
-/** The default allowlist for a department that has not been configured. */
-export const DEFAULT_TOOLS = [
-  'memory.recall',
-  'memory.write',
-  'task.create',
-  'task.update',
-  'task.list',
-  'goal.list',
-  'report.generate',
-] as const
+/**
+ * The default allowlist for a department that has not been configured.
+ *
+ * Platform tools only, and it is the same constant the seed composes from — so a
+ * misconfigured department degrades to "can think, cannot touch the outside
+ * world" rather than inheriting whatever happened to be registered.
+ */
+export const DEFAULT_TOOLS = PLATFORM_TOOLS
